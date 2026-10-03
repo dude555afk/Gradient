@@ -110,7 +110,7 @@ class _FloatingTopBar extends StatelessWidget implements PreferredSizeWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          Text(
+                          const Text(
                             'Remote coding',
                             style: TextStyle(fontSize: 10),
                           ),
@@ -119,8 +119,14 @@ class _FloatingTopBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                     IconButton(
                       tooltip: 'GitHub workspace',
-                      onPressed: null,
-                      icon: Icon(Icons.call_split_rounded),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const GitHubWorkspacePage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.call_split_rounded),
                     ),
                   ],
                 ),
