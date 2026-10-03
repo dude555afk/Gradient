@@ -35,6 +35,8 @@ Kelivo-style UI
 
 Development starts on `bootstrap/kelivo-shell`.
 
+Bootstrap status: active.
+
 ## License
 
 AGPL-3.0-or-later. Gradient adapts AGPL-licensed Kelivo concepts and code. See `NOTICE.md`.
