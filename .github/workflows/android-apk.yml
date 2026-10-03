@@ -26,17 +26,17 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Build debug APK
-        run: flutter build apk --debug
+      - name: Build release APK
+        run: flutter build apk --release
 
       - name: Prepare artifact
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-debug.apk dist/Gradient-debug.apk
+          cp build/app/outputs/flutter-apk/app-release.apk dist/Gradient-release.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Gradient-debug-apk
-          path: dist/Gradient-debug.apk
+          name: Gradient-release-apk
+          path: dist/Gradient-release.apk
           if-no-files-found: error
           retention-days: 14
