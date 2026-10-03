@@ -1,7 +1,7 @@
 name: gradient
 description: Lightweight AI-powered GitHub client for remote coding on Android.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.12.1
@@ -14,6 +14,7 @@ dependencies:
   html: ^0.15.6
   webview_flutter: ^4.13.1
   shared_preferences: ^2.5.3
+  flutter_secure_storage: ^9.2.4
   url_launcher: ^6.3.2
 
 dev_dependencies:
