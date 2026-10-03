@@ -110,7 +110,7 @@ class _FloatingTopBar extends StatelessWidget implements PreferredSizeWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const Text(
+                          Text(
                             'Remote coding',
                             style: TextStyle(fontSize: 10),
                           ),
