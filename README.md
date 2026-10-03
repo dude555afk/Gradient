@@ -1,41 +1,54 @@
 # Gradient
 
-A lightweight Android-first AI coding client for remote GitHub work.
+Gradient is an Android-first AI coding client for working directly with GitHub repositories from a phone.
 
-Gradient keeps the polished chat-first feel of Kelivo while replacing generic assistant plumbing with coding-focused tools: GitHub, workflows, diffs, skills, model routing, and native web research.
+## Current features
 
-## Bootstrap
+- Kelivo-inspired chat-first mobile UI
+- GitHub OAuth device flow plus PAT fallback
+- Android secure storage for GitHub and provider tokens
+- Repository and branch picker
+- Embedded GitHub WebView
+- OpenAI-compatible provider support
+- Per-role model routing: fast, coding, reasoning, search, vision, reviewer
+- Native keyless DuckDuckGo search
+- Web page extraction for research
+- Remote GitHub file reads and directory listing
+- GitHub Actions run/job/log inspection
+- Automatic safe task-branch creation
+- Diff-first AI file changes
+- User-approved apply + commit
+- User-approved pull request creation
+- Flutter analyze/test CI
+- Release APK artifact workflow
 
-- Kelivo-inspired mobile chat UI
-- Embedded GitHub WebView workspace
-- Native GitHub REST seam
-- Native keyless DuckDuckGo search adapted from Kelivo
-- Task-aware model routing
-- Bundled GitHub / CI / Android / Research skills
-- Flutter analyze + tests in GitHub Actions
-- No MCP requirement for normal GitHub or web access
+## Agent safety model
 
-## Architecture
+Gradient does not expose a direct write-file tool to the model. The model can inspect the repo and prepare complete file replacements, but those become local diff cards. The user must press **Apply & commit** before GitHub is mutated.
 
-```
-Kelivo-style UI
-      ↓
-   AI Agent
-      ↓
- Skill Router
-      ↓
- Model Router
-      ↓
- Native Tools
- ├─ GitHub REST
- ├─ GitHub WebView
- ├─ DuckDuckGo Search
- └─ Diff/Patch Engine (next)
-```
+If an edit is proposed on the default branch, Gradient creates a task branch before applying it.
 
-Development starts on `bootstrap/kelivo-shell`.
+## AI providers
 
-Bootstrap status: active.
+Gradient talks to OpenAI-compatible `/chat/completions` endpoints. Configure:
+
+- base URL
+- API key, optional for anonymous endpoints
+- default model
+- optional role-specific models
+- optional reasoning effort
+
+This keeps Gradient usable with OpenRouter and compatible gateways without baking provider credentials into the app.
+
+## GitHub OAuth
+
+Gradient implements GitHub's device flow. Create a GitHub OAuth App, enable **Device Flow**, then paste its client ID in Settings. No client secret is stored in the app.
+
+A personal access token fallback is available for development/testing.
+
+## Development
+
+Bootstrap work currently lives on `bootstrap/kelivo-shell`.
 
 ## License
 

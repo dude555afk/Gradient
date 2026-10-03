@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class GitHubWorkspacePage extends StatefulWidget {
-  const GitHubWorkspacePage({super.key});
+  const GitHubWorkspacePage({
+    super.key,
+    this.initialUrl = 'https://github.com',
+  });
+
+  final String initialUrl;
 
   @override
   State<GitHubWorkspacePage> createState() => _GitHubWorkspacePageState();
@@ -10,11 +15,12 @@ class GitHubWorkspacePage extends StatefulWidget {
 
 class _GitHubWorkspacePageState extends State<GitHubWorkspacePage> {
   late final WebViewController _controller;
-  String _url = 'https://github.com';
+  late String _url;
 
   @override
   void initState() {
     super.initState();
+    _url = widget.initialUrl;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
