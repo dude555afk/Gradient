@@ -386,7 +386,7 @@ Rules:
             newContent: newContent,
             currentSha: sha,
             message: message,
-            branch: activeBranch ?? repo.branch,
+            branch: activeBranch ?? repo!.branch,
           ),
         );
         return _ToolResult(
