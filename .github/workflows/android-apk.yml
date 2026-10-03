@@ -1,0 +1,42 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: ["bootstrap/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          cache: true
+
+      - name: Generate Android runner
+        run: |
+          flutter create .             --platforms=android             --project-name gradient             --org com.dude555afk
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-debug.apk dist/Gradient-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gradient-debug-apk
+          path: dist/Gradient-debug.apk
+          if-no-files-found: error
+          retention-days: 14
