@@ -4,6 +4,7 @@ import '../ai/openai_compatible_provider.dart';
 import '../gh/gh_backend.dart';
 import '../gh/gh_command_runner.dart';
 import '../search/web_research_service.dart';
+import '../security/protected_path.dart';
 import '../settings/app_settings.dart';
 import '../workspace/workspace_store.dart';
 import 'agent_models.dart';
@@ -326,9 +327,15 @@ Rules:
         );
 
       case 'github_read_file':
+        final path = args['path'] as String? ?? '';
+        if (isProtectedRepositoryPath(path)) {
+          return const _ToolResult(
+            'Blocked: Gradient will not send protected credential or secret files to the model.',
+          );
+        }
         final file = await github!.readFile(
           repo!.fullName,
-          args['path'] as String? ?? '',
+          path,
           ref: activeBranch ?? repo.branch,
         );
         return _ToolResult(file.content);
@@ -378,6 +385,11 @@ Rules:
 
       case 'propose_file_change':
         final path = args['path'] as String? ?? '';
+        if (isProtectedRepositoryPath(path)) {
+          return const _ToolResult(
+            'Blocked: Gradient will not edit protected credential or secret files.',
+          );
+        }
         final newContent = args['content'] as String? ?? '';
         final message = args['message'] as String? ?? 'Update $path';
 
