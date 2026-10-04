@@ -1,36 +1,79 @@
 # Gradient
 
-Gradient is a **GitHub website wrapper with an AI coding layer on top**.
+Gradient is an **AI-native GitHub mobile client for Android**.
 
-The GitHub website is the primary interface. Gradient does not try to recreate repositories, issues, pull requests, Actions, or account navigation with a second custom client UI. Instead it embeds GitHub in a full-screen Android WebView and adds a native AI overlay for coding work.
+The UI is native Flutter. GitHub operations are executed through a bundled Android build of the official **GitHub CLI (`gh`)**, and Gradient's AI agent uses the same controlled CLI backend for repository work.
 
-## Product shape
+## Architecture
 
-- Full GitHub website as the main screen
-- Persistent GitHub WebView cookies/session
-- Floating Gradient AI button
-- AI panel overlays the page you are already viewing
-- Current repo / PR / issue / file / Actions page inferred from the GitHub URL
-- Safe visible-page excerpt passed into AI context
-- Sensitive-looking files such as `.env`, keys, keystores, and credential files are excluded from page-text context
-- OpenAI-compatible AI provider support
-- Native DuckDuckGo web research
-- Direct GitHub REST reads behind the scenes
-- GitHub Actions run/job/log inspection
-- Diff-first edits
-- Explicit **Apply & commit** approval before repository writes
-- Explicit approval before PR creation
-- Automatic task branch if an edit would otherwise touch the default branch
+```
+Native Gradient UI
+        ↓
+GitHub CLI backend
+        ↓
+      GitHub
 
-## GitHub authentication
+        +
 
-Browsing uses the normal GitHub website/session in WebView.
+Gradient AI
+   ↓
+Skill + model router
+   ↓
+Controlled gh tools + web research + diff engine
+```
 
-Direct API mutations still require GitHub API authorization. Gradient supports GitHub OAuth device flow and a PAT fallback in Settings. Those credentials are kept in Android secure storage and are not used as the visual browsing session.
+## Current features
 
-## AI provider
+- Native GitHub home/dashboard
+- Native repository list
+- Native repository code browser
+- Branch picker
+- Native issue list
+- Native pull request list
+- Native GitHub Actions list
+- Native workflow job/log viewer
+- WebView fallback for pages not rebuilt natively yet
+- Bundled GitHub CLI 2.102.0 for Android arm64
+- GitHub CLI web/device login, no custom OAuth app required
+- Secure token storage
+- OpenAI-compatible AI providers
+- Kelivo-style provider model fetching from `/models`
+- Searchable model picker
+- Fast / Coding / Reasoning / Search / Vision / Reviewer model roles
+- DuckDuckGo web research
+- AI repo/file/workflow context
+- Diff-first AI edits
+- Explicit Apply & commit approval
+- Explicit pull request approval
+- Automatic task branches instead of silent default-branch writes
 
-Configure an OpenAI-compatible endpoint in Settings. Gradient supports a default model plus optional role-specific models for fast, coding, reasoning, search, vision, and reviewer tasks.
+## GitHub backend
+
+Gradient does not give the model unrestricted shell access. App features and AI tools call structured wrappers around `gh` commands such as:
+
+- `gh repo list`
+- `gh api`
+- `gh issue list`
+- `gh pr list`
+- `gh run list`
+- `gh run view`
+- `gh pr create`
+
+Authentication is supplied to the CLI through `GH_TOKEN` from Android secure storage.
+
+## AI providers
+
+Gradient supports OpenAI-compatible endpoints. Configure a base URL and optional API key, press **Fetch models**, then select models instead of manually remembering IDs.
+
+Role-specific model slots can override the default model for coding, reasoning, search, vision, reviewing, and fast tasks.
+
+## Safety
+
+- GitHub credentials are never passed into model prompts.
+- Sensitive file paths are excluded from page-context extraction.
+- AI file writes become reviewable diffs first.
+- Default-branch mutations are blocked by the agent flow.
+- The model never receives an unrestricted terminal.
 
 ## Development
 
