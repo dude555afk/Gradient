@@ -290,9 +290,10 @@ class GhBackend {
   Future<String> workflowJobLog(String fullName, int jobId) async {
     final result = await _runner.run([
       'api',
+      '--allow-escape-sequences',
       'repos/$fullName/actions/jobs/$jobId/logs',
     ]);
-    return result.stdout;
+    return _stripTerminalSequences(result.stdout);
   }
 
   Future<String> createBranch({
@@ -387,5 +388,29 @@ class GhBackend {
         .join('/');
     final suffix = safePath.isEmpty ? '' : '/$safePath';
     return 'repos/$fullName/contents$suffix?ref=${Uri.encodeQueryComponent(ref)}';
+  }
+
+  String _stripTerminalSequences(String input) {
+    var value = input;
+
+    // CSI sequences such as colors, cursor movement, and erase commands.
+    value = value.replaceAll(
+      RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]'),
+      '',
+    );
+
+    // OSC sequences, including hyperlinks and terminal title changes.
+    value = value.replaceAll(
+      RegExp(r'\x1B\][^\x07]*(?:\x07|\x1B\\)'),
+      '',
+    );
+
+    // Keep newlines and tabs, but remove the remaining unsafe controls.
+    value = value.replaceAll(
+      RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'),
+      '',
+    );
+
+    return value.replaceAll('\r', '');
   }
 }

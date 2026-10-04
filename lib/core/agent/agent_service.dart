@@ -42,8 +42,6 @@ class AgentService {
       apiKey: apiKey,
     );
 
-    // Public repositories can be inspected anonymously. A token is only
-    // mandatory when GitHub itself requires authentication.
     final github =
         workspace == null ? null : GhBackend(token: githubToken);
     final web = webEnabled ? WebResearchService() : null;
@@ -95,14 +93,21 @@ class AgentService {
         }
 
         for (final call in turn.toolCalls) {
-          final result = await _runTool(
-            call,
-            github: github,
-            web: web,
-            activeBranch: activeBranch,
-            changes: changes,
-            pullRequests: pullRequests,
-          );
+          _ToolResult result;
+          try {
+            result = await _runTool(
+              call,
+              github: github,
+              web: web,
+              activeBranch: activeBranch,
+              changes: changes,
+              pullRequests: pullRequests,
+            );
+          } on GhCommandException catch (error) {
+            result = _ToolResult(
+              _githubToolError(call.name, error),
+            );
+          }
 
           if (call.name == 'github_create_branch' &&
               result.updatedBranch != null) {
@@ -155,6 +160,7 @@ Rules:
 - Treat the currently selected native GitHub repository and screen as the user's primary workspace.
 - Use the current native screen/repository context before asking the user to repeat what they are looking at.
 - Inspect relevant repository files with GitHub tools before proposing edits when those tools are available.
+- A GitHub tool may report a missing path or other recoverable error. Try another relevant path or continue with the information you do have instead of aborting the whole task.
 - Never expose credentials, tokens, .env contents, keystores, signing secrets, private keys, or sensitive configuration.
 - Never modify the default branch directly.
 - File edits must go through propose_file_change with the COMPLETE replacement file content. Gradient shows a diff and requires explicit user approval before committing.
@@ -441,6 +447,30 @@ Rules:
       default:
         throw UnsupportedError('Unknown agent tool: ${call.name}');
     }
+  }
+
+  String _githubToolError(String toolName, GhCommandException error) {
+    final message = error.message.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final lower = message.toLowerCase();
+
+    if (error.exitCode == 1 &&
+        (lower.contains('404') || lower.contains('not found'))) {
+      return jsonEncode({
+        'ok': false,
+        'tool': toolName,
+        'error': 'not_found',
+        'message':
+            'GitHub could not find that path/resource. Try another likely path, ref, run, or job and continue instead of aborting.',
+      });
+    }
+
+    return jsonEncode({
+      'ok': false,
+      'tool': toolName,
+      'error': 'github_cli_error',
+      'exit_code': error.exitCode,
+      'message': message.length > 600 ? '${message.substring(0, 600)}…' : message,
+    });
   }
 
   int _intArg(Object? value) {
