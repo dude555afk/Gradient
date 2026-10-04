@@ -45,6 +45,38 @@ class GhCommandRunner {
     return path;
   }
 
+  Future<Directory> configDirectory() async {
+    final dir = Directory(
+      '${Directory.systemTemp.path}/gradient-gh',
+    );
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<Map<String, String>> commandEnvironment() async {
+    final configDir = await configDirectory();
+    return {
+      'GH_PAGER': 'cat',
+      'PAGER': 'cat',
+      'NO_COLOR': '1',
+      'CLICOLOR': '0',
+      'GH_PROMPT_DISABLED': '1',
+      'GH_CONFIG_DIR': configDir.path,
+      'HOME': configDir.path,
+      'TMPDIR': Directory.systemTemp.path,
+      if (token.trim().isNotEmpty) 'GH_TOKEN': token.trim(),
+    };
+  }
+
+  Future<void> clearCliConfig() async {
+    final dir = await configDirectory();
+    if (dir.existsSync()) {
+      dir.deleteSync(recursive: true);
+    }
+  }
+
   Future<GhCommandResult> run(
     List<String> args, {
     String? stdin,
@@ -52,27 +84,12 @@ class GhCommandRunner {
     bool throwOnError = true,
   }) async {
     final binary = await binaryPath();
-    final configDir = Directory(
-      '${Directory.systemTemp.path}/gradient-gh',
-    );
-    if (!configDir.existsSync()) {
-      configDir.createSync(recursive: true);
-    }
+    final environment = await commandEnvironment();
 
     final process = await Process.start(
       binary,
       args,
-      environment: {
-        'GH_PAGER': 'cat',
-        'PAGER': 'cat',
-        'NO_COLOR': '1',
-        'CLICOLOR': '0',
-        'GH_PROMPT_DISABLED': '1',
-        'GH_CONFIG_DIR': configDir.path,
-        'HOME': configDir.path,
-        'TMPDIR': Directory.systemTemp.path,
-        if (token.trim().isNotEmpty) 'GH_TOKEN': token.trim(),
-      },
+      environment: environment,
       includeParentEnvironment: true,
       runInShell: false,
     );
