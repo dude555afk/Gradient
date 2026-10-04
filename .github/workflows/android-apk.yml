@@ -21,13 +21,90 @@ jobs:
 
       - name: Generate Android runner
         run: |
-          flutter create .             --platforms=android             --project-name gradient             --org com.dude555afk
+          flutter create . \
+            --platforms=android \
+            --project-name gradient \
+            --org com.dude555afk
+
+      - name: Add Android networking and native bridge
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+          permissions = """
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+          """
+          if 'android.permission.INTERNET' not in text:
+              text = text.replace(marker, marker + permissions)
+
+          if 'android:extractNativeLibs=' not in text:
+              text = text.replace(
+                  '<application',
+                  '<application android:extractNativeLibs="true"',
+                  1,
+              )
+
+          manifest.write_text(text)
+
+          activity = Path(
+              "android/app/src/main/kotlin/com/dude555afk/gradient/MainActivity.kt"
+          )
+          activity.parent.mkdir(parents=True, exist_ok=True)
+          activity.write_text("""package com.dude555afk.gradient
+
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(
+                      flutterEngine.dartExecutor.binaryMessenger,
+                      "gradient/native"
+                  ).setMethodCallHandler { call, result ->
+                      when (call.method) {
+                          "nativeLibraryDir" -> {
+                              result.success(applicationInfo.nativeLibraryDir)
+                          }
+                          else -> result.notImplemented()
+                      }
+                  }
+              }
+          }
+          """)
+          PY
+
+      - name: Fetch GitHub CLI source
+        run: |
+          git clone --depth 1 --branch v2.102.0 \
+            https://github.com/cli/cli.git "$RUNNER_TEMP/gh"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+
+      - name: Build GitHub CLI for Android arm64
+        run: |
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cd "$RUNNER_TEMP/gh"
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
+            go build -trimpath -ldflags="-s -w" \
+            -o "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so" \
+            ./cmd/gh
+          file "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so"
 
       - name: Resolve dependencies
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Prepare artifact
         run: |
