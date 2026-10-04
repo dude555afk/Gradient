@@ -372,7 +372,6 @@ class GhBackend {
         .map(Uri.encodeComponent)
         .join('/');
     final suffix = safePath.isEmpty ? '' : '/$safePath';
-    return 'repos/$fullName/contents$suffix?ref=' +
-        Uri.encodeQueryComponent(ref);
+    return 'repos/$fullName/contents$suffix?ref=${Uri.encodeQueryComponent(ref)}';
   }
 }
