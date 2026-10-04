@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import '../ai/openai_compatible_provider.dart';
-import '../github/github_service.dart';
+import '../gh/gh_backend.dart';
 import '../search/web_research_service.dart';
 import '../settings/app_settings.dart';
 import '../workspace/workspace_store.dart';
@@ -43,7 +43,7 @@ class AgentService {
     // Public repositories can be inspected anonymously. A token is only
     // mandatory when GitHub itself requires authentication.
     final github =
-        workspace == null ? null : GitHubService(token: githubToken);
+        workspace == null ? null : GhBackend(token: githubToken);
     final web = webEnabled ? WebResearchService() : null;
 
     var activeBranch = workspace?.branch;
@@ -131,7 +131,6 @@ class AgentService {
       );
     } finally {
       ai.dispose();
-      github?.dispose();
       web?.dispose();
     }
   }
@@ -294,7 +293,7 @@ Rules:
 
   Future<_ToolResult> _runTool(
     AiToolCall call, {
-    required GitHubService? github,
+    required GhBackend? github,
     required WebResearchService? web,
     required String? activeBranch,
     required List<PendingFileChange> changes,
@@ -391,8 +390,11 @@ Rules:
           );
           oldContent = current.content;
           sha = current.sha;
-        } on GitHubException catch (error) {
-          if (error.statusCode != 404) rethrow;
+              } on GhCommandException catch (error) {
+          if (!error.message.contains('404') &&
+              !error.message.toLowerCase().contains('not found')) {
+            rethrow;
+          }
         }
 
         changes.add(
