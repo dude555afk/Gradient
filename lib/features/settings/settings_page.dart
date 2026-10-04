@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/ai/provider_model_catalog.dart';
-import '../../core/github/github_auth_service.dart';
+import '../../core/gh/gh_auth_service.dart';
 import '../../core/settings/app_settings.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -23,7 +23,6 @@ class _SettingsPageState extends State<SettingsPage> {
   final _visionModel = TextEditingController();
   final _reviewerModel = TextEditingController();
   final _apiKey = TextEditingController();
-  final _githubClientId = TextEditingController();
   final _githubToken = TextEditingController();
 
   List<ProviderModel> _models = const [];
@@ -56,7 +55,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _searchModel.text = settings.searchModel;
     _visionModel.text = settings.visionModel;
     _reviewerModel.text = settings.reviewerModel;
-    _githubClientId.text = settings.githubClientId;
     _apiKey.text = apiKey;
 
     setState(() {
@@ -80,7 +78,7 @@ class _SettingsPageState extends State<SettingsPage> {
       visionModel: _visionModel.text,
       reviewerModel: _reviewerModel.text,
       reasoningEffort: _reasoningEffort,
-      githubClientId: _githubClientId.text,
+      githubClientId: '',
     );
   }
 
@@ -180,31 +178,19 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _connectWithGitHub() async {
-    final clientId = _githubClientId.text.trim();
-    if (clientId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Add your GitHub OAuth App client ID first.'),
-        ),
-      );
-      return;
-    }
-
     await _store.save(_settingsFromForm());
     setState(() {
       _connecting = true;
       _deviceCode = null;
     });
 
-    final auth = GitHubAuthService();
+    final auth = GhAuthService();
     try {
-      final code = await auth.requestDeviceCode(clientId);
-      if (!mounted) return;
-      setState(() => _deviceCode = code.userCode);
-      await auth.openVerification(code);
-      final token = await auth.pollForToken(
-        clientId: clientId,
-        code: code,
+      final token = await auth.login(
+        onPrompt: (prompt) {
+          if (!mounted || prompt.code.isEmpty) return;
+          setState(() => _deviceCode = prompt.code);
+        },
       );
       await _store.setGithubToken(token);
 
@@ -214,7 +200,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _deviceCode = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('GitHub connected')),
+        const SnackBar(content: Text('GitHub connected through gh CLI')),
       );
     } catch (error) {
       if (!mounted) return;
@@ -222,7 +208,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SnackBar(content: Text(error.toString())),
       );
     } finally {
-      auth.dispose();
+      auth.cancel();
       if (mounted) {
         setState(() {
           _connecting = false;
@@ -250,7 +236,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _visionModel,
       _reviewerModel,
       _apiKey,
-      _githubClientId,
       _githubToken,
     ]) {
       controller.dispose();
@@ -367,19 +352,9 @@ class _SettingsPageState extends State<SettingsPage> {
               _githubConnected ? 'Connected' : 'Not connected',
             ),
             subtitle: const Text(
-              'Tokens are stored with Android secure storage.',
+              'Gradient uses the bundled GitHub CLI for GitHub operations. The token is stored with Android secure storage.',
             ),
           ),
-          TextField(
-            controller: _githubClientId,
-            decoration: const InputDecoration(
-              labelText: 'GitHub OAuth App client ID',
-              helperText:
-                  'Device flow must be enabled on the OAuth App. No client secret is stored.',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: _connecting ? null : _connectWithGitHub,
             icon: _connecting
@@ -414,7 +389,7 @@ class _SettingsPageState extends State<SettingsPage> {
             tilePadding: EdgeInsets.zero,
             title: const Text('Personal access token fallback'),
             subtitle: const Text(
-              'Useful for testing before creating an OAuth App.',
+              'Optional fallback if web login is unavailable.',
             ),
             children: [
               TextField(
