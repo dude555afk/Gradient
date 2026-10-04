@@ -14,6 +14,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify signing secrets
+        shell: bash
+        env:
+          GRADIENT_KEYSTORE_BASE64: ${{ secrets.GRADIENT_KEYSTORE_BASE64 }}
+          GRADIENT_KEYSTORE_PASSWORD: ${{ secrets.GRADIENT_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GRADIENT_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Missing repository secret GRADIENT_KEYSTORE_BASE64"
+            exit 1
+          fi
+          if [ -z "${GRADIENT_KEYSTORE_PASSWORD:-}" ]; then
+            echo "::error::Missing repository secret GRADIENT_KEYSTORE_PASSWORD"
+            exit 1
+          fi
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.9'
@@ -26,8 +42,23 @@ jobs:
             --project-name gradient \
             --org com.dude555afk
 
-      - name: Add Android networking and native bridge
+      - name: Add Android networking, signing, and native bridge
+        shell: bash
+        env:
+          GRADIENT_KEYSTORE_BASE64: ${{ secrets.GRADIENT_KEYSTORE_BASE64 }}
+          GRADIENT_KEYSTORE_PASSWORD: ${{ secrets.GRADIENT_KEYSTORE_PASSWORD }}
         run: |
+          set -euo pipefail
+
+          printf '%s' "$GRADIENT_KEYSTORE_BASE64" | base64 --decode \
+            > android/app/gradient-release.jks
+          test -s android/app/gradient-release.jks
+
+          keytool -list \
+            -keystore android/app/gradient-release.jks \
+            -storepass "$GRADIENT_KEYSTORE_PASSWORD" \
+            -alias gradient >/dev/null
+
           python3 - <<'PY'
           from pathlib import Path
 
@@ -46,6 +77,7 @@ jobs:
 
           gradle = Path("android/app/build.gradle.kts")
           gradle_text = gradle.read_text()
+
           if "useLegacyPackaging = true" not in gradle_text:
               gradle_text = gradle_text.replace(
                   "android {",
@@ -57,6 +89,28 @@ jobs:
               }""",
                   1,
               )
+
+          if 'create("release")' not in gradle_text:
+              gradle_text = gradle_text.replace(
+                  "    buildTypes {",
+                  """    signingConfigs {
+                  create("release") {
+                      keyAlias = "gradient"
+                      keyPassword = System.getenv("GRADIENT_KEYSTORE_PASSWORD")
+                      storeFile = file("gradient-release.jks")
+                      storePassword = System.getenv("GRADIENT_KEYSTORE_PASSWORD")
+                  }
+              }
+
+              buildTypes {""",
+                  1,
+              )
+
+          gradle_text = gradle_text.replace(
+              'signingConfig = signingConfigs.getByName("debug")',
+              'signingConfig = signingConfigs.getByName("release")',
+          )
+
           gradle.write_text(gradle_text)
 
           activity = Path(
@@ -130,17 +184,34 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
-      - name: Build release APK
-        run: flutter build apk --release --target-platform android-arm64
-
-      - name: Prepare artifact
+      - name: Build signed release APK
+        env:
+          GRADIENT_KEYSTORE_PASSWORD: ${{ secrets.GRADIENT_KEYSTORE_PASSWORD }}
         run: |
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            --build-name 0.3.0 \
+            --build-number "$GITHUB_RUN_NUMBER"
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk dist/Gradient-release.apk
+          "$APKSIGNER" verify --verbose --print-certs dist/Gradient-release.apk \
+            | tee dist/signing-certificate.txt
 
       - uses: actions/upload-artifact@v4
         with:
           name: Gradient-release-apk
-          path: dist/Gradient-release.apk
+          path: |
+            dist/Gradient-release.apk
+            dist/signing-certificate.txt
           if-no-files-found: error
           retention-days: 14
