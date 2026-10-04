@@ -42,14 +42,22 @@ jobs:
           if 'android.permission.INTERNET' not in text:
               text = text.replace(marker, marker + permissions)
 
-          if 'android:extractNativeLibs=' not in text:
-              text = text.replace(
-                  '<application',
-                  '<application android:extractNativeLibs="true"',
+          manifest.write_text(text)
+
+          gradle = Path("android/app/build.gradle.kts")
+          gradle_text = gradle.read_text()
+          if "useLegacyPackaging = true" not in gradle_text:
+              gradle_text = gradle_text.replace(
+                  "android {",
+                  """android {
+              packaging {
+                  jniLibs {
+                      useLegacyPackaging = true
+                  }
+              }""",
                   1,
               )
-
-          manifest.write_text(text)
+          gradle.write_text(gradle_text)
 
           activity = Path(
               "android/app/src/main/kotlin/com/dude555afk/gradient/MainActivity.kt"
