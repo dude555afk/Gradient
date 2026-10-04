@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/ai/provider_model_catalog.dart';
 import '../../core/gh/gh_auth_service.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/update/update_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -33,6 +35,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _connecting = false;
   bool _githubConnected = false;
   String? _deviceCode;
+  bool _checkingUpdate = false;
+  GradientUpdateStatus? _updateStatus;
 
   @override
   void initState() {
@@ -222,6 +226,57 @@ class _SettingsPageState extends State<SettingsPage> {
     await _store.clearGithubToken();
     if (!mounted) return;
     setState(() => _githubConnected = false);
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingUpdate) return;
+
+    setState(() => _checkingUpdate = true);
+    final service = GradientUpdateService();
+
+    try {
+      final status = await service.check();
+      if (!mounted) return;
+      setState(() => _updateStatus = status);
+
+      if (!status.updateAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Gradient is up to date • '
+              '${status.currentVersionName}+${status.currentVersionCode}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      service.dispose();
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
+  }
+
+  Future<void> _downloadUpdate() async {
+    final info = _updateStatus?.latest;
+    if (info == null || info.apkUrl.isEmpty) return;
+
+    final uri = Uri.tryParse(info.apkUrl);
+    if (uri == null) return;
+
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the update download.')),
+      );
+    }
   }
 
   @override
@@ -419,6 +474,76 @@ class _SettingsPageState extends State<SettingsPage> {
                 label: const Text('Disconnect GitHub'),
               ),
             ),
+          const SizedBox(height: 24),
+          Text(
+            'Updates',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.system_update_alt_rounded),
+                      SizedBox(width: 8),
+                      Text(
+                        'Gradient update channel',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _updateStatus == null
+                        ? 'Check GitHub Releases for a newer signed APK.'
+                        : _updateStatus!.updateAvailable
+                            ? 'Update available: '
+                                '${_updateStatus!.latest.versionName}+'
+                                '${_updateStatus!.latest.versionCode}'
+                            : 'Current: '
+                                '${_updateStatus!.currentVersionName}+'
+                                '${_updateStatus!.currentVersionCode} • up to date',
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed:
+                              _checkingUpdate ? null : _checkForUpdates,
+                          icon: _checkingUpdate
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
+                          label: Text(
+                            _checkingUpdate
+                                ? 'Checking…'
+                                : 'Check for updates',
+                          ),
+                        ),
+                      ),
+                      if (_updateStatus?.updateAvailable == true) ...[
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: _downloadUpdate,
+                          icon: const Icon(Icons.download_rounded),
+                          label: const Text('Download'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _saving ? null : _save,
