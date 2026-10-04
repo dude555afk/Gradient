@@ -54,8 +54,29 @@ jobs:
         run: |
           set -euo pipefail
 
-          printf '%s' "$GRADIENT_KEYSTORE_BASE64" | base64 --decode \
-            > android/app/gradient-release.jks
+          python3 - <<'PY'
+          import base64
+          import os
+          import re
+          from pathlib import Path
+
+          raw = os.environ["GRADIENT_KEYSTORE_BASE64"]
+          candidates = re.findall(r"[A-Za-z0-9+/=]{500,}", raw)
+          if not candidates:
+              raise SystemExit("Could not find a base64 keystore payload in GRADIENT_KEYSTORE_BASE64")
+
+          payload = max(candidates, key=len)
+          try:
+              data = base64.b64decode(payload, validate=True)
+          except Exception as exc:
+              raise SystemExit(f"Invalid keystore base64 payload: {exc}")
+
+          out = Path("android/app/gradient-release.jks")
+          out.write_bytes(data)
+          if out.stat().st_size < 1000:
+              raise SystemExit("Decoded keystore is unexpectedly small")
+          PY
+
           test -s android/app/gradient-release.jks
 
           ACTUAL_CERT="$(
