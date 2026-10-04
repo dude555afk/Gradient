@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/ai/provider_model_catalog.dart';
 import '../../core/github/github_auth_service.dart';
 import '../../core/settings/app_settings.dart';
 
@@ -25,9 +26,11 @@ class _SettingsPageState extends State<SettingsPage> {
   final _githubClientId = TextEditingController();
   final _githubToken = TextEditingController();
 
+  List<ProviderModel> _models = const [];
   String _reasoningEffort = '';
   bool _loading = true;
   bool _saving = false;
+  bool _fetchingModels = false;
   bool _connecting = false;
   bool _githubConnected = false;
   String? _deviceCode;
@@ -42,6 +45,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = await _store.load();
     final apiKey = await _store.apiKey();
     final githubToken = await _store.githubToken();
+    final cachedModels = await _store.cachedModels();
 
     if (!mounted) return;
     _baseUrl.text = settings.baseUrl;
@@ -54,7 +58,11 @@ class _SettingsPageState extends State<SettingsPage> {
     _reviewerModel.text = settings.reviewerModel;
     _githubClientId.text = settings.githubClientId;
     _apiKey.text = apiKey;
+
     setState(() {
+      _models = cachedModels
+          .map((id) => ProviderModel(id: id, displayName: id))
+          .toList(growable: false);
       _reasoningEffort = settings.reasoningEffort;
       _githubConnected = githubToken.isNotEmpty;
       _loading = false;
@@ -74,6 +82,75 @@ class _SettingsPageState extends State<SettingsPage> {
       reasoningEffort: _reasoningEffort,
       githubClientId: _githubClientId.text,
     );
+  }
+
+  Future<void> _fetchModels() async {
+    if (_fetchingModels) return;
+
+    setState(() => _fetchingModels = true);
+    final catalog = ProviderModelCatalog(
+      baseUrl: _baseUrl.text,
+      apiKey: _apiKey.text,
+    );
+
+    try {
+      final models = await catalog.fetchModels();
+      await _store.saveCachedModels(models.map((e) => e.id));
+
+      if (!mounted) return;
+      setState(() => _models = models);
+
+      if (models.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Provider returned no models. Check the endpoint or API key.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await _pickModel(
+        controller: _defaultModel,
+        title: 'Choose default model',
+        allowClear: false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      catalog.dispose();
+      if (mounted) setState(() => _fetchingModels = false);
+    }
+  }
+
+  Future<void> _pickModel({
+    required TextEditingController controller,
+    required String title,
+    required bool allowClear,
+  }) async {
+    if (_models.isEmpty) {
+      await _fetchModels();
+      return;
+    }
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _ModelPickerSheet(
+        title: title,
+        models: _models,
+        current: controller.text.trim(),
+        allowClear: allowClear,
+      ),
+    );
+
+    if (selected == null || !mounted) return;
+    setState(() => controller.text = selected);
   }
 
   Future<void> _save() async {
@@ -218,13 +295,27 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _defaultModel,
-            decoration: const InputDecoration(
-              labelText: 'Default model',
-              hintText: 'provider/model-name',
-              border: OutlineInputBorder(),
+          FilledButton.tonalIcon(
+            onPressed: _fetchingModels ? null : _fetchModels,
+            icon: _fetchingModels
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download_rounded),
+            label: Text(
+              _fetchingModels
+                  ? 'Fetching models…'
+                  : _models.isEmpty
+                      ? 'Fetch models'
+                      : 'Fetch models again (${_models.length})',
             ),
+          ),
+          const SizedBox(height: 10),
+          _modelField(
+            _defaultModel,
+            'Default model',
+            allowClear: false,
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
@@ -363,14 +454,143 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _modelField(TextEditingController controller, String label) {
+  Widget _modelField(
+    TextEditingController controller,
+    String label, {
+    bool allowClear = true,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
           labelText: label,
+          hintText: _models.isEmpty
+              ? 'Fetch models or type a model ID'
+              : 'Choose from ${_models.length} fetched models',
           border: const OutlineInputBorder(),
+          suffixIcon: IconButton(
+            tooltip: 'Choose fetched model',
+            onPressed: () => _pickModel(
+              controller: controller,
+              title: 'Choose $label',
+              allowClear: allowClear,
+            ),
+            icon: const Icon(Icons.expand_more_rounded),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelPickerSheet extends StatefulWidget {
+  const _ModelPickerSheet({
+    required this.title,
+    required this.models,
+    required this.current,
+    required this.allowClear,
+  });
+
+  final String title;
+  final List<ProviderModel> models;
+  final String current;
+  final bool allowClear;
+
+  @override
+  State<_ModelPickerSheet> createState() => _ModelPickerSheetState();
+}
+
+class _ModelPickerSheetState extends State<_ModelPickerSheet> {
+  final _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _search.addListener(_refresh);
+  }
+
+  void _refresh() => setState(() {});
+
+  @override
+  void dispose() {
+    _search
+      ..removeListener(_refresh)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _search.text.trim().toLowerCase();
+    final visible = q.isEmpty
+        ? widget.models
+        : widget.models
+            .where(
+              (model) =>
+                  model.id.toLowerCase().contains(q) ||
+                  model.displayName.toLowerCase().contains(q),
+            )
+            .toList(growable: false);
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .72,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  Text('${widget.models.length} models'),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: SearchBar(
+                controller: _search,
+                hintText: 'Search model IDs',
+                leading: const Icon(Icons.search_rounded),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                children: [
+                  if (widget.allowClear)
+                    ListTile(
+                      leading: const Icon(Icons.restart_alt_rounded),
+                      title: const Text('Use default model'),
+                      onTap: () => Navigator.pop(context, ''),
+                    ),
+                  for (final model in visible)
+                    ListTile(
+                      leading: Icon(
+                        model.id == widget.current
+                            ? Icons.check_circle_rounded
+                            : Icons.memory_rounded,
+                      ),
+                      title: Text(model.displayName),
+                      subtitle: model.displayName == model.id
+                          ? null
+                          : Text(
+                              model.id,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                      onTap: () => Navigator.pop(context, model.id),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

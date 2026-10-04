@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -77,6 +79,7 @@ class AppSettingsStore {
 
   static const _apiKeyKey = 'ai_api_key_v1';
   static const _githubTokenKey = 'github_token_v1';
+  static const _cachedModelsKey = 'ai_cached_models_v1';
 
   final FlutterSecureStorage _secure;
 
@@ -111,6 +114,36 @@ class AppSettingsStore {
       prefs.setString('ai_reasoning_effort', settings.reasoningEffort.trim()),
       prefs.setString('github_client_id', settings.githubClientId.trim()),
     ]);
+  }
+
+  Future<List<String>> cachedModels() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_cachedModelsKey);
+    if (raw == null || raw.trim().isEmpty) return const [];
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return decoded
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList(growable: false)
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveCachedModels(Iterable<String> models) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = models
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList(growable: false)
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    await prefs.setString(_cachedModelsKey, jsonEncode(normalized));
   }
 
   Future<String> apiKey() async =>
