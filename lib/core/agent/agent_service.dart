@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../ai/openai_compatible_provider.dart';
 import '../gh/gh_backend.dart';
+import '../gh/gh_command_runner.dart';
 import '../search/web_research_service.dart';
 import '../settings/app_settings.dart';
 import '../workspace/workspace_store.dart';
@@ -141,7 +142,7 @@ class AgentService {
   }) {
     final repo = workspace;
     return '''
-You are Gradient, an AI coding overlay running on top of the GitHub website on Android.
+You are Gradient, an AI coding agent inside a native GitHub mobile client on Android. GitHub operations are executed through a controlled GitHub CLI backend.
 
 Active skills: $skills.
 ${repo == null ? 'No repository API context is available for this page.' : 'Repository: ${repo.fullName}\nDefault branch: ${repo.defaultBranch}\nActive branch: ${activeBranch ?? repo.branch}'}
@@ -150,8 +151,8 @@ Current GitHub browser context:
 ${pageContext.trim().isEmpty ? 'No safe page excerpt is available.' : pageContext}
 
 Rules:
-- Treat the GitHub website page as the user's primary workspace.
-- Use the current page context before asking the user to repeat what they are looking at.
+- Treat the currently selected native GitHub repository and screen as the user's primary workspace.
+- Use the current native screen/repository context before asking the user to repeat what they are looking at.
 - Inspect relevant repository files with GitHub tools before proposing edits when those tools are available.
 - Never expose credentials, tokens, .env contents, keystores, signing secrets, private keys, or sensitive configuration.
 - Never modify the default branch directly.
@@ -328,7 +329,7 @@ Rules:
         final file = await github!.readFile(
           repo!.fullName,
           args['path'] as String? ?? '',
-          ref: activeBranch,
+          ref: activeBranch ?? repo.branch,
         );
         return _ToolResult(file.content);
 
@@ -336,7 +337,7 @@ Rules:
         final entries = await github!.listContents(
           repo!.fullName,
           path: args['path'] as String? ?? '',
-          ref: activeBranch,
+          ref: activeBranch ?? repo.branch,
         );
         return _ToolResult(
           jsonEncode(entries.map((e) => e.toJson()).toList()),
@@ -386,11 +387,11 @@ Rules:
           final current = await github!.readFile(
             repo!.fullName,
             path,
-            ref: activeBranch,
+            ref: activeBranch ?? repo.branch,
           );
           oldContent = current.content;
           sha = current.sha;
-              } on GhCommandException catch (error) {
+        } on GhCommandException catch (error) {
           if (!error.message.contains('404') &&
               !error.message.toLowerCase().contains('not found')) {
             rethrow;
