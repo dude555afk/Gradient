@@ -52,6 +52,12 @@ class GhCommandRunner {
     bool throwOnError = true,
   }) async {
     final binary = await binaryPath();
+    final configDir = Directory(
+      '${Directory.systemTemp.path}/gradient-gh',
+    );
+    if (!configDir.existsSync()) {
+      configDir.createSync(recursive: true);
+    }
 
     final process = await Process.start(
       binary,
@@ -62,6 +68,9 @@ class GhCommandRunner {
         'NO_COLOR': '1',
         'CLICOLOR': '0',
         'GH_PROMPT_DISABLED': '1',
+        'GH_CONFIG_DIR': configDir.path,
+        'HOME': configDir.path,
+        'TMPDIR': Directory.systemTemp.path,
         if (token.trim().isNotEmpty) 'GH_TOKEN': token.trim(),
       },
       includeParentEnvironment: true,
