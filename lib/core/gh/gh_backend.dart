@@ -127,6 +127,20 @@ class GhBackend {
     }).where((repo) => repo.fullName.isNotEmpty).toList(growable: false);
   }
 
+  Future<List<String>> listBranches(String fullName) async {
+    final result = await _runner.run([
+      'api',
+      'repos/$fullName/branches?per_page=100',
+      '--jq',
+      '.[].name',
+    ]);
+    return result.stdout
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+  }
+
   Future<List<GitHubEntry>> listContents(
     String fullName, {
     String path = '',
