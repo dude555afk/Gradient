@@ -4,3 +4,4 @@ linter:
   rules:
     prefer_const_constructors: true
     avoid_print: true
+    prefer_interpolation_to_compose_strings: false
