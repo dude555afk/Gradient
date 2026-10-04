@@ -98,12 +98,15 @@ jobs:
           go-version: '1.27.1'
           cache: false
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install Android NDK
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "ndk;27.0.12077973"
+          set -euxo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973"
 
       - name: Build GitHub CLI for Android arm64 with native DNS
         shell: bash
