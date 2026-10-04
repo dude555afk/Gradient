@@ -15,6 +15,7 @@ class AgentService {
     required this.githubToken,
     required this.workspace,
     required this.webEnabled,
+    this.pageContext = '',
   });
 
   final AiSettings settings;
@@ -22,6 +23,7 @@ class AgentService {
   final String githubToken;
   final WorkspaceSelection? workspace;
   final bool webEnabled;
+  final String pageContext;
 
   Future<AgentResult> run({
     required String prompt,
@@ -37,9 +39,11 @@ class AgentService {
       baseUrl: settings.baseUrl,
       apiKey: apiKey,
     );
-    final github = workspace == null || githubToken.isEmpty
-        ? null
-        : GitHubService(token: githubToken);
+
+    // Public repositories can be inspected anonymously. A token is only
+    // mandatory when GitHub itself requires authentication.
+    final github =
+        workspace == null ? null : GitHubService(token: githubToken);
     final web = webEnabled ? WebResearchService() : null;
 
     var activeBranch = workspace?.branch;
@@ -63,6 +67,7 @@ class AgentService {
     final tools = _tools(
       hasGithub: github != null,
       hasWeb: web != null,
+      canMutateGithub: githubToken.trim().isNotEmpty,
     );
 
     String finalText = '';
@@ -137,19 +142,24 @@ class AgentService {
   }) {
     final repo = workspace;
     return '''
-You are Gradient, a remote coding agent running on Android.
+You are Gradient, an AI coding overlay running on top of the GitHub website on Android.
 
 Active skills: $skills.
-${repo == null ? 'No GitHub repository is currently selected.' : 'Repository: ${repo.fullName}\nDefault branch: ${repo.defaultBranch}\nActive branch: ${activeBranch ?? repo.branch}'}
+${repo == null ? 'No repository API context is available for this page.' : 'Repository: ${repo.fullName}\nDefault branch: ${repo.defaultBranch}\nActive branch: ${activeBranch ?? repo.branch}'}
+
+Current GitHub browser context:
+${pageContext.trim().isEmpty ? 'No safe page excerpt is available.' : pageContext}
 
 Rules:
-- Inspect relevant files before proposing edits.
-- Never expose credentials, tokens, .env contents, keystores, or signing secrets.
-- Never modify the default branch directly. If an edit is needed while on the default branch, create a task branch first.
-- File edits must go through propose_file_change with the COMPLETE replacement file content. Gradient will show a diff and require user approval before committing.
-- Pull requests must go through propose_pull_request and require user approval.
+- Treat the GitHub website page as the user's primary workspace.
+- Use the current page context before asking the user to repeat what they are looking at.
+- Inspect relevant repository files with GitHub tools before proposing edits when those tools are available.
+- Never expose credentials, tokens, .env contents, keystores, signing secrets, private keys, or sensitive configuration.
+- Never modify the default branch directly.
+- File edits must go through propose_file_change with the COMPLETE replacement file content. Gradient shows a diff and requires explicit user approval before committing.
+- Pull requests must go through propose_pull_request and require explicit user approval.
 - Use workflow tools to inspect actual failed runs/jobs/logs before diagnosing CI failures.
-- When web tools are available, search official documentation for version-sensitive facts and open useful results before relying on them.
+- Search official documentation for version-sensitive facts when web tools are available.
 - Prefer minimal, targeted changes.
 ''';
   }
@@ -157,6 +167,7 @@ Rules:
   List<Map<String, dynamic>> _tools({
     required bool hasGithub,
     required bool hasWeb,
+    required bool canMutateGithub,
   }) {
     final tools = <Map<String, dynamic>>[];
 
@@ -185,7 +196,7 @@ Rules:
       tools.addAll([
         _tool(
           'github_read_file',
-          'Read a UTF-8 file from the selected GitHub repository.',
+          'Read a UTF-8 file from the current GitHub repository.',
           {
             'path': {'type': 'string'},
           },
@@ -193,19 +204,11 @@ Rules:
         ),
         _tool(
           'github_list_files',
-          'List files and folders in a repository directory.',
+          'List files and folders in the current repository.',
           {
             'path': {'type': 'string'},
           },
           const [],
-        ),
-        _tool(
-          'github_create_branch',
-          'Create and switch to a new branch from the current active branch.',
-          {
-            'name': {'type': 'string'},
-          },
-          const ['name'],
         ),
         _tool(
           'github_workflow_runs',
@@ -229,27 +232,40 @@ Rules:
           },
           const ['job_id'],
         ),
-        _tool(
-          'propose_file_change',
-          'Propose a complete replacement for a repository file. This does not commit.',
-          {
-            'path': {'type': 'string'},
-            'content': {'type': 'string'},
-            'message': {'type': 'string'},
-          },
-          const ['path', 'content', 'message'],
-        ),
-        _tool(
-          'propose_pull_request',
-          'Propose a pull request for user approval. This does not create it.',
-          {
-            'title': {'type': 'string'},
-            'body': {'type': 'string'},
-            'base': {'type': 'string'},
-          },
-          const ['title', 'body'],
-        ),
       ]);
+
+      if (canMutateGithub) {
+        tools.addAll([
+          _tool(
+            'github_create_branch',
+            'Create and switch to a new branch from the current active branch.',
+            {
+              'name': {'type': 'string'},
+            },
+            const ['name'],
+          ),
+          _tool(
+            'propose_file_change',
+            'Propose a complete replacement for a repository file. This does not commit.',
+            {
+              'path': {'type': 'string'},
+              'content': {'type': 'string'},
+              'message': {'type': 'string'},
+            },
+            const ['path', 'content', 'message'],
+          ),
+          _tool(
+            'propose_pull_request',
+            'Propose a pull request for user approval. This does not create it.',
+            {
+              'title': {'type': 'string'},
+              'body': {'type': 'string'},
+              'base': {'type': 'string'},
+            },
+            const ['title', 'body'],
+          ),
+        ]);
+      }
     }
 
     return tools;

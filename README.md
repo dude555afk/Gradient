@@ -1,54 +1,40 @@
 # Gradient
 
-Gradient is an Android-first AI coding client for working directly with GitHub repositories from a phone.
+Gradient is a **GitHub website wrapper with an AI coding layer on top**.
 
-## Current features
+The GitHub website is the primary interface. Gradient does not try to recreate repositories, issues, pull requests, Actions, or account navigation with a second custom client UI. Instead it embeds GitHub in a full-screen Android WebView and adds a native AI overlay for coding work.
 
-- Kelivo-inspired chat-first mobile UI
-- GitHub OAuth device flow plus PAT fallback
-- Android secure storage for GitHub and provider tokens
-- Repository and branch picker
-- Embedded GitHub WebView
-- OpenAI-compatible provider support
-- Per-role model routing: fast, coding, reasoning, search, vision, reviewer
-- Native keyless DuckDuckGo search
-- Web page extraction for research
-- Remote GitHub file reads and directory listing
+## Product shape
+
+- Full GitHub website as the main screen
+- Persistent GitHub WebView cookies/session
+- Floating Gradient AI button
+- AI panel overlays the page you are already viewing
+- Current repo / PR / issue / file / Actions page inferred from the GitHub URL
+- Safe visible-page excerpt passed into AI context
+- Sensitive-looking files such as `.env`, keys, keystores, and credential files are excluded from page-text context
+- OpenAI-compatible AI provider support
+- Native DuckDuckGo web research
+- Direct GitHub REST reads behind the scenes
 - GitHub Actions run/job/log inspection
-- Automatic safe task-branch creation
-- Diff-first AI file changes
-- User-approved apply + commit
-- User-approved pull request creation
-- Flutter analyze/test CI
-- Release APK artifact workflow
+- Diff-first edits
+- Explicit **Apply & commit** approval before repository writes
+- Explicit approval before PR creation
+- Automatic task branch if an edit would otherwise touch the default branch
 
-## Agent safety model
+## GitHub authentication
 
-Gradient does not expose a direct write-file tool to the model. The model can inspect the repo and prepare complete file replacements, but those become local diff cards. The user must press **Apply & commit** before GitHub is mutated.
+Browsing uses the normal GitHub website/session in WebView.
 
-If an edit is proposed on the default branch, Gradient creates a task branch before applying it.
+Direct API mutations still require GitHub API authorization. Gradient supports GitHub OAuth device flow and a PAT fallback in Settings. Those credentials are kept in Android secure storage and are not used as the visual browsing session.
 
-## AI providers
+## AI provider
 
-Gradient talks to OpenAI-compatible `/chat/completions` endpoints. Configure:
-
-- base URL
-- API key, optional for anonymous endpoints
-- default model
-- optional role-specific models
-- optional reasoning effort
-
-This keeps Gradient usable with OpenRouter and compatible gateways without baking provider credentials into the app.
-
-## GitHub OAuth
-
-Gradient implements GitHub's device flow. Create a GitHub OAuth App, enable **Device Flow**, then paste its client ID in Settings. No client secret is stored in the app.
-
-A personal access token fallback is available for development/testing.
+Configure an OpenAI-compatible endpoint in Settings. Gradient supports a default model plus optional role-specific models for fast, coding, reasoning, search, vision, and reviewer tasks.
 
 ## Development
 
-Bootstrap work currently lives on `bootstrap/kelivo-shell`.
+Current bootstrap branch: `bootstrap/kelivo-shell`
 
 ## License
 

@@ -1,16 +1,17 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/agent/agent_models.dart';
 import '../../core/agent/agent_service.dart';
 import '../../core/diff/simple_diff.dart';
+import '../../core/github/github_page_context.dart';
 import '../../core/github/github_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/workspace/workspace_store.dart';
-import '../repos/repository_picker_page.dart';
 import '../settings/settings_page.dart';
-import '../workspace/github_workspace_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -27,52 +28,166 @@ class _HomePageState extends State<HomePage> {
   final List<_UiMessage> _messages = [];
   final List<PendingFileChange> _changes = [];
   final List<PendingPullRequest> _pullRequests = [];
+  final Map<String, String> _defaultBranchCache = {};
 
+  late final WebViewController _webView;
+
+  GitHubPageContext _page =
+      GitHubPageContext.parse('https://github.com');
   WorkspaceSelection? _workspace;
+  String _pageTitle = 'GitHub';
+  String _pageExcerpt = '';
   String _modelLabel = 'Auto';
   bool _webEnabled = true;
   bool _busy = false;
+  bool _assistantOpen = false;
+  double _progress = 0;
 
   @override
   void initState() {
     super.initState();
-    _restoreWorkspace();
+    _webView = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel(
+        'GradientPage',
+        onMessageReceived: _onPageMessage,
+      )
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (progress) {
+            if (mounted) setState(() => _progress = progress / 100);
+          },
+          onUrlChange: (change) {
+            final url = change.url;
+            if (url != null) _syncUrl(url);
+          },
+          onPageFinished: (url) async {
+            await _syncUrl(url);
+            await _captureVisiblePage();
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse('https://github.com'));
   }
 
-  Future<void> _restoreWorkspace() async {
-    final workspace = await _workspaceStore.load();
-    if (!mounted) return;
-    setState(() => _workspace = workspace);
-  }
+  void _onPageMessage(JavaScriptMessage message) {
+    try {
+      final decoded = jsonDecode(message.message) as Map<String, dynamic>;
+      final title = decoded['title'] as String? ?? 'GitHub';
+      var text = decoded['text'] as String? ?? '';
 
-  Future<void> _pickRepo() async {
-    final selection = await Navigator.of(context).push<WorkspaceSelection>(
-      MaterialPageRoute<WorkspaceSelection>(
-        builder: (_) => const RepositoryPickerPage(),
-      ),
-    );
-    if (selection != null && mounted) {
-      setState(() => _workspace = selection);
+      if (_page.mayContainSensitiveFile) {
+        text = '';
+      } else {
+        text = _redact(text);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _pageTitle = title;
+        _pageExcerpt = text;
+      });
+    } catch (_) {
+      // A changing GitHub DOM should never break the browser itself.
     }
+  }
+
+  String _redact(String text) {
+    return text
+        .replaceAll(
+          RegExp(r'github_pat_[A-Za-z0-9_]+'),
+          '[REDACTED_GITHUB_TOKEN]',
+        )
+        .replaceAll(
+          RegExp(r'gh[pousr]_[A-Za-z0-9]+'),
+          '[REDACTED_GITHUB_TOKEN]',
+        )
+        .replaceAll(
+          RegExp(r'sk-[A-Za-z0-9_-]{16,}'),
+          '[REDACTED_API_KEY]',
+        );
+  }
+
+  Future<void> _captureVisiblePage() async {
+    const script = r'''
+(() => {
+  const body = document.body?.innerText || '';
+  const text = body.replace(/\s+/g, ' ').trim().slice(0, 12000);
+  GradientPage.postMessage(JSON.stringify({
+    title: document.title || 'GitHub',
+    text
+  }));
+})();
+''';
+    try {
+      await _webView.runJavaScript(script);
+    } catch (_) {
+      // Page context is optional. Browsing must keep working without it.
+    }
+  }
+
+  Future<void> _syncUrl(String url) async {
+    final parsed = GitHubPageContext.parse(url);
+
+    if (!mounted) return;
+    setState(() => _page = parsed);
+
+    final fullName = parsed.fullName;
+    if (fullName == null) {
+      if (mounted) setState(() => _workspace = null);
+      return;
+    }
+
+    var defaultBranch = _defaultBranchCache[fullName];
+    if (defaultBranch == null) {
+      final token = await _settingsStore.githubToken();
+      final github = GitHubService(token: token);
+      try {
+        final repo = await github.repository(fullName);
+        defaultBranch =
+            repo['default_branch'] as String? ?? 'main';
+        _defaultBranchCache[fullName] = defaultBranch;
+      } catch (_) {
+        defaultBranch = 'main';
+      } finally {
+        github.dispose();
+      }
+    }
+
+    final selection = WorkspaceSelection(
+      fullName: fullName,
+      defaultBranch: defaultBranch,
+      branch: parsed.branch ?? defaultBranch,
+    );
+    await _workspaceStore.save(selection);
+
+    if (!mounted) return;
+    setState(() => _workspace = selection);
+  }
+
+  String _agentPageContext() {
+    final buffer = StringBuffer()
+      ..writeln(_page.describe())
+      ..writeln('Page title: $_pageTitle');
+
+    if (_pageExcerpt.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln('Visible GitHub page excerpt:')
+        ..writeln(_pageExcerpt);
+    } else if (_page.mayContainSensitiveFile) {
+      buffer.writeln(
+        'Visible page text withheld because the current path may contain sensitive configuration.',
+      );
+    }
+
+    return buffer.toString().trim();
   }
 
   Future<void> _openSettings() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const SettingsPage(),
-      ),
-    );
-  }
-
-  void _openGitHub() {
-    final workspace = _workspace;
-    final url = workspace == null
-        ? 'https://github.com'
-        : 'https://github.com/${workspace.fullName}/tree/${workspace.branch}';
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => GitHubWorkspacePage(initialUrl: url),
       ),
     );
   }
@@ -100,6 +215,7 @@ class _HomePageState extends State<HomePage> {
 
     setState(() {
       _busy = true;
+      _assistantOpen = true;
       _messages.add(_UiMessage(role: 'user', text: prompt));
       if (forcedPrompt == null) _controller.clear();
     });
@@ -111,6 +227,7 @@ class _HomePageState extends State<HomePage> {
         githubToken: githubToken,
         workspace: _workspace,
         webEnabled: _webEnabled,
+        pageContext: _agentPageContext(),
       ).run(
         prompt: prompt,
         history: history,
@@ -157,7 +274,17 @@ class _HomePageState extends State<HomePage> {
     final token = await _settingsStore.githubToken();
     if (token.isEmpty) {
       if (!mounted) return;
-      await _openSettings();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Connect GitHub in Gradient settings before committing.',
+          ),
+          action: SnackBarAction(
+            label: 'Settings',
+            onPressed: _openSettings,
+          ),
+        ),
+      );
       return;
     }
 
@@ -197,6 +324,7 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       });
+      await _webView.reload();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -212,7 +340,11 @@ class _HomePageState extends State<HomePage> {
     if (workspace == null) return;
 
     final token = await _settingsStore.githubToken();
-    if (token.isEmpty) return;
+    if (token.isEmpty) {
+      if (!mounted) return;
+      await _openSettings();
+      return;
+    }
 
     final github = GitHubService(token: token);
     try {
@@ -234,6 +366,10 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       });
+
+      if (url.isNotEmpty) {
+        await _webView.loadRequest(Uri.parse(url));
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -242,6 +378,16 @@ class _HomePageState extends State<HomePage> {
     } finally {
       github.dispose();
     }
+  }
+
+  String _primaryQuickAction() {
+    return switch (_page.kind) {
+      'actions' => 'Inspect the current Actions page. Find the latest failed workflow, read the failed job logs, diagnose the root cause, and propose the smallest safe fix.',
+      'pull_request' => 'Review the pull request currently open in GitHub. Inspect the changed code, identify regressions or risks, and suggest concrete fixes.',
+      'issue' => 'Analyze the issue currently open in GitHub. Inspect relevant repository files and propose an implementation plan.',
+      'file' => 'Explain the file currently open in GitHub, focusing on what it does, risks, and improvements.',
+      _ => 'Inspect the current GitHub repository page and explain the project structure, current state, and most useful next coding action.',
+    };
   }
 
   @override
@@ -253,69 +399,80 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: _GradientDrawer(
-        workspace: _workspace,
-        onPickRepo: _pickRepo,
-        onSettings: _openSettings,
-        onOpenGitHub: _openGitHub,
-      ),
-      extendBodyBehindAppBar: true,
-      appBar: _FloatingTopBar(
-        workspace: _workspace,
-        onOpenGitHub: _openGitHub,
-      ),
       body: SafeArea(
         child: Stack(
           children: [
-            if (_messages.isEmpty && _changes.isEmpty && _pullRequests.isEmpty)
-              _EmptyState(
-                workspace: _workspace,
-                onPrompt: _send,
-              )
-            else
-              ListView(
-                padding: const EdgeInsets.fromLTRB(12, 76, 12, 170),
-                children: [
-                  for (final message in _messages)
-                    _MessageBubble(message: message),
-                  for (final change in _changes)
-                    _ChangeCard(
-                      change: change,
-                      onApply: () => _applyChange(change),
-                    ),
-                  for (final proposal in _pullRequests)
-                    _PullRequestCard(
-                      proposal: proposal,
-                      onCreate: () => _createPullRequest(proposal),
-                    ),
-                  if (_busy)
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 10),
-                          Text('Gradient is working…'),
-                        ],
-                      ),
-                    ),
-                ],
+            Positioned.fill(
+              child: WebViewWidget(controller: _webView),
+            ),
+            if (_progress < 1)
+              Align(
+                alignment: Alignment.topCenter,
+                child: LinearProgressIndicator(value: _progress),
               ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: _Composer(
+            Positioned(
+              top: 10,
+              left: 10,
+              right: 10,
+              child: _BrowserBar(
+                page: _page,
+                title: _pageTitle,
+                onBack: () async {
+                  if (await _webView.canGoBack()) {
+                    await _webView.goBack();
+                  }
+                },
+                onForward: () async {
+                  if (await _webView.canGoForward()) {
+                    await _webView.goForward();
+                  }
+                },
+                onHome: () => _webView.loadRequest(
+                  Uri.parse('https://github.com'),
+                ),
+                onReload: _webView.reload,
+                onSettings: _openSettings,
+              ),
+            ),
+            if (!_assistantOpen)
+              Positioned(
+                right: 16,
+                bottom: 22,
+                child: FloatingActionButton.extended(
+                  heroTag: 'gradient-ai',
+                  onPressed: () {
+                    setState(() => _assistantOpen = true);
+                  },
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                  label: const Text('Gradient'),
+                ),
+              ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              left: 8,
+              right: 8,
+              bottom: _assistantOpen ? 8 : -620,
+              height: MediaQuery.sizeOf(context).height * .67,
+              child: _AssistantPanel(
                 controller: _controller,
+                messages: _messages,
+                changes: _changes,
+                pullRequests: _pullRequests,
+                busy: _busy,
                 webEnabled: _webEnabled,
                 modelLabel: _modelLabel,
-                busy: _busy,
+                page: _page,
+                onClose: () {
+                  setState(() => _assistantOpen = false);
+                },
+                onSend: () => _send(),
+                onQuickAction: () => _send(_primaryQuickAction()),
                 onToggleWeb: () {
                   setState(() => _webEnabled = !_webEnabled);
                 },
-                onSend: () => _send(),
-                onRepo: _pickRepo,
+                onApplyChange: _applyChange,
+                onCreatePullRequest: _createPullRequest,
               ),
             ),
           ],
@@ -325,55 +482,67 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class _FloatingTopBar extends StatelessWidget implements PreferredSizeWidget {
-  const _FloatingTopBar({
-    required this.workspace,
-    required this.onOpenGitHub,
+class _BrowserBar extends StatelessWidget {
+  const _BrowserBar({
+    required this.page,
+    required this.title,
+    required this.onBack,
+    required this.onForward,
+    required this.onHome,
+    required this.onReload,
+    required this.onSettings,
   });
 
-  final WorkspaceSelection? workspace;
-  final VoidCallback onOpenGitHub;
-
-  @override
-  Size get preferredSize => const Size.fromHeight(68);
+  final GitHubPageContext page;
+  final String title;
+  final VoidCallback onBack;
+  final VoidCallback onForward;
+  final VoidCallback onHome;
+  final VoidCallback onReload;
+  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final subtitle = workspace == null
-        ? 'No repository selected'
-        : '${workspace!.fullName} • ${workspace!.branch}';
+    final subtitle = page.fullName ?? 'github.com';
 
-    return SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Material(
-              color: cs.surfaceContainer.withValues(alpha: .82),
-              child: SizedBox(
-                height: 52,
-                child: Row(
-                  children: [
-                    Builder(
-                      builder: (context) => IconButton(
-                        tooltip: 'Menu',
-                        onPressed: () => Scaffold.of(context).openDrawer(),
-                        icon: const Icon(Icons.menu_rounded),
-                      ),
-                    ),
-                    Expanded(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Material(
+          elevation: 2,
+          color: cs.surface.withValues(alpha: .90),
+          child: SizedBox(
+            height: 54,
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Back',
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Forward',
+                  onPressed: onForward,
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: onHome,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Gradient',
-                            style: TextStyle(
-                              fontSize: 15,
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -386,14 +555,19 @@ class _FloatingTopBar extends StatelessWidget implements PreferredSizeWidget {
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'GitHub workspace',
-                      onPressed: onOpenGitHub,
-                      icon: const Icon(Icons.call_split_rounded),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                IconButton(
+                  tooltip: 'Reload',
+                  onPressed: onReload,
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Gradient settings',
+                  onPressed: onSettings,
+                  icon: const Icon(Icons.tune_rounded),
+                ),
+              ],
             ),
           ),
         ),
@@ -402,99 +576,209 @@ class _FloatingTopBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.workspace,
-    required this.onPrompt,
+class _AssistantPanel extends StatelessWidget {
+  const _AssistantPanel({
+    required this.controller,
+    required this.messages,
+    required this.changes,
+    required this.pullRequests,
+    required this.busy,
+    required this.webEnabled,
+    required this.modelLabel,
+    required this.page,
+    required this.onClose,
+    required this.onSend,
+    required this.onQuickAction,
+    required this.onToggleWeb,
+    required this.onApplyChange,
+    required this.onCreatePullRequest,
   });
 
-  final WorkspaceSelection? workspace;
-  final Future<void> Function(String prompt) onPrompt;
+  final TextEditingController controller;
+  final List<_UiMessage> messages;
+  final List<PendingFileChange> changes;
+  final List<PendingPullRequest> pullRequests;
+  final bool busy;
+  final bool webEnabled;
+  final String modelLabel;
+  final GitHubPageContext page;
+  final VoidCallback onClose;
+  final VoidCallback onSend;
+  final VoidCallback onQuickAction;
+  final VoidCallback onToggleWeb;
+  final Future<void> Function(PendingFileChange change) onApplyChange;
+  final Future<void> Function(PendingPullRequest proposal)
+      onCreatePullRequest;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final quickLabel = switch (page.kind) {
+      'actions' => 'Fix workflow',
+      'pull_request' => 'Review PR',
+      'issue' => 'Analyze issue',
+      'file' => 'Explain file',
+      _ => 'Inspect repo',
+    };
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 48, 28, 150),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 54,
-              height: 54,
-              decoration: BoxDecoration(
-                color: cs.secondaryContainer.withValues(alpha: .72),
-                borderRadius: BorderRadius.circular(18),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: Material(
+          elevation: 12,
+          color: cs.surface.withValues(alpha: .96),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 8, 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, size: 19),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Gradient',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        page.fullName ?? 'GitHub',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: onClose,
+                      icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(Icons.gradient_rounded, size: 28),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'What are we building?',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              workspace == null
-                  ? 'Connect GitHub and choose a repository, or just ask a web/coding question.'
-                  : 'Active: ${workspace!.fullName} on ${workspace!.branch}',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 22),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                _PromptChip(
-                  'Fix workflow',
-                  onTap: () => onPrompt(
-                    'Inspect the latest failed GitHub Actions workflow, read the failed job logs, diagnose the root cause, and propose the smallest safe file changes to fix it.',
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    onPressed: busy ? null : onQuickAction,
+                    avatar: const Icon(Icons.bolt_rounded, size: 16),
+                    label: Text(quickLabel),
                   ),
                 ),
-                _PromptChip(
-                  'Review repo',
-                  onTap: () => onPrompt(
-                    'Inspect this repository and summarize the architecture, risky areas, and the most important improvements. Read relevant files before answering.',
-                  ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: messages.isEmpty &&
+                        changes.isEmpty &&
+                        pullRequests.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            page.hasRepository
+                                ? 'Ask about the GitHub page behind this panel. Gradient already knows which repo/page you are viewing.'
+                                : 'Browse to a repository, PR, issue, file, or Actions page, then ask Gradient about it.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: [
+                          for (final message in messages)
+                            _MessageBubble(message: message),
+                          for (final change in changes)
+                            _ChangeCard(
+                              change: change,
+                              onApply: () => onApplyChange(change),
+                            ),
+                          for (final proposal in pullRequests)
+                            _PullRequestCard(
+                              proposal: proposal,
+                              onCreate: () =>
+                                  onCreatePullRequest(proposal),
+                            ),
+                          if (busy)
+                            const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: Row(
+                                children: [
+                                  SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Text('Working on this page…'),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      minLines: 1,
+                      maxLines: 4,
+                      enabled: !busy,
+                      onSubmitted: (_) {
+                        if (!busy) onSend();
+                      },
+                      decoration: const InputDecoration(
+                        hintText: 'Ask about this GitHub page…',
+                        border: InputBorder.none,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        FilterChip(
+                          label: const Text('Web'),
+                          selected: webEnabled,
+                          onSelected:
+                              busy ? null : (_) => onToggleWeb(),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Chip(
+                            label: Text(
+                              modelLabel,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            side: BorderSide.none,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton.filled(
+                          onPressed: busy ? null : onSend,
+                          icon: busy
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.arrow_upward_rounded),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                _PromptChip(
-                  'Open PR',
-                  onTap: () => onPrompt(
-                    'Review the current branch changes and propose a pull request to the default branch with a concise title and body.',
-                  ),
-                ),
-                _PromptChip(
-                  'Search docs',
-                  onTap: () => onPrompt(
-                    'Search official documentation for the technologies used by this repository and flag any version-sensitive setup issues.',
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _PromptChip extends StatelessWidget {
-  const _PromptChip(this.label, {required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ActionChip(
-      label: Text(label),
-      side: BorderSide.none,
-      visualDensity: VisualDensity.compact,
-      onPressed: onTap,
     );
   }
 }
@@ -556,7 +840,7 @@ class _ChangeCard extends StatelessWidget {
         children: [
           Container(
             width: double.infinity,
-            constraints: const BoxConstraints(maxHeight: 360),
+            constraints: const BoxConstraints(maxHeight: 320),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -577,7 +861,7 @@ class _ChangeCard extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text(
-                  'Nothing is written until you approve.',
+                  'GitHub is unchanged until you approve.',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
@@ -622,7 +906,7 @@ class _PullRequestCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(proposal.title),
             const SizedBox(height: 4),
             Text(
@@ -633,7 +917,7 @@ class _PullRequestCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(proposal.body),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
@@ -641,195 +925,6 @@ class _PullRequestCard extends StatelessWidget {
                 icon: const Icon(Icons.merge_rounded),
                 label: const Text('Create PR'),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Composer extends StatelessWidget {
-  const _Composer({
-    required this.controller,
-    required this.webEnabled,
-    required this.modelLabel,
-    required this.busy,
-    required this.onToggleWeb,
-    required this.onSend,
-    required this.onRepo,
-  });
-
-  final TextEditingController controller;
-  final bool webEnabled;
-  final String modelLabel;
-  final bool busy;
-  final VoidCallback onToggleWeb;
-  final VoidCallback onSend;
-  final VoidCallback onRepo;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Material(
-            elevation: 2,
-            color: cs.surfaceContainerHigh.withValues(alpha: .93),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    minLines: 1,
-                    maxLines: 6,
-                    enabled: !busy,
-                    onSubmitted: (_) {
-                      if (!busy) onSend();
-                    },
-                    decoration: const InputDecoration(
-                      hintText: 'Ask Gradient…',
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 10,
-                      ),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Choose repository',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: busy ? null : onRepo,
-                        icon: const Icon(Icons.folder_open_rounded),
-                      ),
-                      FilterChip(
-                        label: const Text('Web'),
-                        selected: webEnabled,
-                        onSelected: busy ? null : (_) => onToggleWeb(),
-                        avatar: const Icon(Icons.public_rounded, size: 16),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Chip(
-                          label: Text(
-                            modelLabel,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          avatar: const Icon(
-                            Icons.auto_awesome_rounded,
-                            size: 16,
-                          ),
-                          visualDensity: VisualDensity.compact,
-                          side: BorderSide.none,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton.filled(
-                        tooltip: 'Send',
-                        onPressed: busy ? null : onSend,
-                        icon: busy
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.arrow_upward_rounded),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GradientDrawer extends StatelessWidget {
-  const _GradientDrawer({
-    required this.workspace,
-    required this.onPickRepo,
-    required this.onSettings,
-    required this.onOpenGitHub,
-  });
-
-  final WorkspaceSelection? workspace;
-  final VoidCallback onPickRepo;
-  final VoidCallback onSettings;
-  final VoidCallback onOpenGitHub;
-
-  @override
-  Widget build(BuildContext context) {
-    return Drawer(
-      width: MediaQuery.sizeOf(context).width * .78,
-      child: SafeArea(
-        child: Column(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.gradient_rounded),
-              title: const Text(
-                'Gradient',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              subtitle: workspace == null
-                  ? const Text('No repository')
-                  : Text(
-                      '${workspace!.fullName}\n${workspace!.branch}',
-                      maxLines: 2,
-                    ),
-              trailing: IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: FilledButton.tonalIcon(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(46),
-                  alignment: Alignment.centerLeft,
-                ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  onPickRepo();
-                },
-                icon: const Icon(Icons.folder_open_rounded),
-                label: const Text('Choose repository'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.language_rounded),
-              title: const Text('GitHub workspace'),
-              subtitle: const Text('Browse the active repo in WebView'),
-              onTap: () {
-                Navigator.pop(context);
-                onOpenGitHub();
-              },
-            ),
-            const Divider(),
-            const Spacer(),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pop(context);
-                onSettings();
-              },
             ),
           ],
         ),
