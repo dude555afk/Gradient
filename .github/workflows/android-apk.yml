@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   GRADIENT_APPLICATION_ID: com.dude555afk.gradient
@@ -250,7 +250,7 @@ jobs:
 
           APK_CERT="$(
             "$APKSIGNER" verify --print-certs dist/Gradient-release.apk \
-              | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+              | sed -n 's/^.*certificate SHA-256 digest: //p' \
               | head -n 1 \
               | tr '[:lower:]' '[:upper:]' \
               | sed 's/../&:/g;s/:$//'
@@ -280,16 +280,45 @@ jobs:
               ;;
           esac
 
-          cat > dist/update-info.json <<EOF
+          cat > dist/update.json <<EOF
           {
             "applicationId": "$GRADIENT_APPLICATION_ID",
             "versionName": "$GRADIENT_VERSION_NAME",
             "versionCode": $GRADIENT_VERSION_CODE,
             "signingCertificateSha256": "$GRADIENT_SIGNING_SHA256",
+            "apkUrl": "https://github.com/$GITHUB_REPOSITORY/releases/download/gradient-latest/Gradient-release.apk",
+            "releaseUrl": "https://github.com/$GITHUB_REPOSITORY/releases/tag/gradient-latest",
             "commit": "$GITHUB_SHA",
             "workflowRun": $GITHUB_RUN_NUMBER
           }
           EOF
+
+      - name: Publish rolling Gradient update
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git tag -f gradient-latest "$GITHUB_SHA"
+          git push origin refs/tags/gradient-latest --force
+
+          if gh release view gradient-latest >/dev/null 2>&1; then
+            gh release edit gradient-latest \
+              --title "Gradient latest" \
+              --notes "Rolling signed Android build • $GRADIENT_VERSION_NAME ($GRADIENT_VERSION_CODE)\nCommit: $GITHUB_SHA"
+          else
+            gh release create gradient-latest \
+              --title "Gradient latest" \
+              --notes "Rolling signed Android build • $GRADIENT_VERSION_NAME ($GRADIENT_VERSION_CODE)\nCommit: $GITHUB_SHA" \
+              --prerelease
+          fi
+
+          gh release upload gradient-latest \
+            dist/Gradient-release.apk \
+            dist/update.json \
+            dist/signing-certificate.txt \
+            --clobber
 
       - uses: actions/upload-artifact@v4
         with:
@@ -297,6 +326,6 @@ jobs:
           path: |
             dist/Gradient-release.apk
             dist/signing-certificate.txt
-            dist/update-info.json
+            dist/update.json
           if-no-files-found: error
           retention-days: 14
