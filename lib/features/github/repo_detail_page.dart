@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/gh/gh_backend.dart';
 import '../../core/github/github_models.dart';
 import '../../core/settings/app_settings.dart';
+import '../../core/security/protected_path.dart';
 import '../../core/workspace/workspace_store.dart';
 import '../agent/agent_sheet.dart';
 import '../workspace/github_workspace_page.dart';
@@ -401,12 +402,15 @@ class _CodeBrowserPageState extends State<CodeBrowserPage> {
 
   void _openAgent() {
     final file = _file;
+    final protected = isProtectedRepositoryPath(widget.path);
     final extra = file == null
         ? ''
-        : '\nVisible file content:\n' +
-            (file.content.length > 12000
-                ? file.content.substring(0, 12000)
-                : file.content);
+        : protected
+            ? '\nFile content withheld because this path is protected.'
+            : '\nVisible file content:\n' +
+                (file.content.length > 12000
+                    ? file.content.substring(0, 12000)
+                    : file.content);
 
     showModalBottomSheet<void>(
       context: context,
