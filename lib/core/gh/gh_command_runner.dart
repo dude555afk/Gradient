@@ -66,6 +66,7 @@ class GhCommandRunner {
       'GH_CONFIG_DIR': configDir.path,
       'HOME': configDir.path,
       'TMPDIR': Directory.systemTemp.path,
+      if (Platform.isAndroid) 'GODEBUG': 'netdns=cgo',
       if (token.trim().isNotEmpty) 'GH_TOKEN': token.trim(),
     };
   }
