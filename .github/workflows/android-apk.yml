@@ -1,0 +1,217 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: ["bootstrap/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify signing secrets
+        shell: bash
+        env:
+          GRADIENT_KEYSTORE_BASE64: ${{ secrets.GRADIENT_KEYSTORE_BASE64 }}
+          GRADIENT_KEYSTORE_PASSWORD: ${{ secrets.GRADIENT_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GRADIENT_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Missing repository secret GRADIENT_KEYSTORE_BASE64"
+            exit 1
+          fi
+          if [ -z "${GRADIENT_KEYSTORE_PASSWORD:-}" ]; then
+            echo "::error::Missing repository secret GRADIENT_KEYSTORE_PASSWORD"
+            exit 1
+          fi
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.9'
+          cache: true
+
+      - name: Generate Android runner
+        run: |
+          flutter create . \
+            --platforms=android \
+            --project-name gradient \
+            --org com.dude555afk
+
+      - name: Add Android networking, signing, and native bridge
+        shell: bash
+        env:
+          GRADIENT_KEYSTORE_BASE64: ${{ secrets.GRADIENT_KEYSTORE_BASE64 }}
+          GRADIENT_KEYSTORE_PASSWORD: ${{ secrets.GRADIENT_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          printf '%s' "$GRADIENT_KEYSTORE_BASE64" | base64 --decode \
+            > android/app/gradient-release.jks
+          test -s android/app/gradient-release.jks
+
+          keytool -list \
+            -keystore android/app/gradient-release.jks \
+            -storepass "$GRADIENT_KEYSTORE_PASSWORD" \
+            -alias gradient >/dev/null
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+
+          marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
+          permissions = """
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+          """
+          if 'android.permission.INTERNET' not in text:
+              text = text.replace(marker, marker + permissions)
+
+          manifest.write_text(text)
+
+          gradle = Path("android/app/build.gradle.kts")
+          gradle_text = gradle.read_text()
+
+          if "useLegacyPackaging = true" not in gradle_text:
+              gradle_text = gradle_text.replace(
+                  "android {",
+                  """android {
+              packaging {
+                  jniLibs {
+                      useLegacyPackaging = true
+                  }
+              }""",
+                  1,
+              )
+
+          if 'create("release")' not in gradle_text:
+              gradle_text = gradle_text.replace(
+                  "    buildTypes {",
+                  """    signingConfigs {
+                  create("release") {
+                      keyAlias = "gradient"
+                      keyPassword = System.getenv("GRADIENT_KEYSTORE_PASSWORD")
+                      storeFile = file("gradient-release.jks")
+                      storePassword = System.getenv("GRADIENT_KEYSTORE_PASSWORD")
+                  }
+              }
+
+              buildTypes {""",
+                  1,
+              )
+
+          gradle_text = gradle_text.replace(
+              'signingConfig = signingConfigs.getByName("debug")',
+              'signingConfig = signingConfigs.getByName("release")',
+          )
+
+          gradle.write_text(gradle_text)
+
+          activity = Path(
+              "android/app/src/main/kotlin/com/dude555afk/gradient/MainActivity.kt"
+          )
+          activity.parent.mkdir(parents=True, exist_ok=True)
+          activity.write_text("""package com.dude555afk.gradient
+
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(
+                      flutterEngine.dartExecutor.binaryMessenger,
+                      "gradient/native"
+                  ).setMethodCallHandler { call, result ->
+                      when (call.method) {
+                          "nativeLibraryDir" -> {
+                              result.success(applicationInfo.nativeLibraryDir)
+                          }
+                          else -> result.notImplemented()
+                      }
+                  }
+              }
+          }
+          """)
+          PY
+
+      - name: Fetch GitHub CLI source
+        run: |
+          git clone --depth 1 --branch v2.102.0 \
+            https://github.com/cli/cli.git "$RUNNER_TEMP/gh"
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "ndk;27.0.12077973"
+
+      - name: Build GitHub CLI for Android arm64 with native DNS
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          TOOLCHAIN="$SDK_ROOT/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC="$TOOLCHAIN/aarch64-linux-android21-clang"
+          test -x "$CC"
+
+          cd "$RUNNER_TEMP/gh"
+          CGO_ENABLED=1 GOOS=android GOARCH=arm64 \
+            go build -trimpath -ldflags="-s -w" \
+            -o "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so" \
+            ./cmd/gh
+
+          file "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so"
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build signed release APK
+        env:
+          GRADIENT_KEYSTORE_PASSWORD: ${{ secrets.GRADIENT_KEYSTORE_PASSWORD }}
+        run: |
+          flutter build apk \
+            --release \
+            --target-platform android-arm64 \
+            --build-name 0.3.0 \
+            --build-number "$GITHUB_RUN_NUMBER"
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/Gradient-release.apk
+          "$APKSIGNER" verify --verbose --print-certs dist/Gradient-release.apk \
+            | tee dist/signing-certificate.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gradient-release-apk
+          path: |
+            dist/Gradient-release.apk
+            dist/signing-certificate.txt
+          if-no-files-found: error
+          retention-days: 14
