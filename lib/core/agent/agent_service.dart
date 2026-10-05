@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../ai/model_health_registry.dart';
 import '../ai/openai_compatible_provider.dart';
 import '../gh/gh_backend.dart';
 import '../gh/gh_command_runner.dart';
@@ -38,10 +39,13 @@ class AgentService {
       prompt,
       hasImages: imageDataUris.isNotEmpty,
     );
-    final model = settings.modelFor(route.model);
-    if (model.isEmpty) {
+    final health = ModelHealthRegistry.instance;
+    final configuredCandidates = settings.modelCandidates(route.model);
+    final candidates = health.healthyFirst(configuredCandidates);
+    if (candidates.isEmpty) {
       throw StateError('No model configured for ${route.model.label}.');
     }
+    var activeModel = candidates.first;
 
     final ai = OpenAiCompatibleProvider(
       baseUrl: settings.baseUrl,
@@ -97,40 +101,83 @@ class AgentService {
       for (var round = 0; round < 14; round++) {
         onProgress?.call(
           AgentProgressEvent(
-            label: round == 0 ? 'Thinking' : 'Continuing',
-            detail: model,
+            label: round == 0 ? route.model.label : 'Continuing',
+            detail: activeModel,
             kind: 'model',
           ),
         );
 
         AiTurn? turn;
-        for (var attempt = 0; attempt < 4; attempt++) {
-          try {
-            turn = await ai.completeStreaming(
-              model: model,
-              messages: messages,
-              tools: tools,
-              reasoningEffort: settings.reasoningEffort,
-              onDelta: onTextDelta,
-            );
-            break;
-          } on AiProviderException catch (error) {
-            if (!error.retryable || attempt == 3) rethrow;
-            final wait = Duration(milliseconds: 900 * (1 << attempt));
-            onProgress?.call(
-              AgentProgressEvent(
-                label: error.statusCode == 429
-                    ? 'Rate limited · retrying'
-                    : 'Provider busy · retrying',
-                detail: '${wait.inMilliseconds ~/ 1000 + 1}s',
-                kind: 'model',
-              ),
-            );
-            await Future<void>.delayed(wait);
+        AiProviderException? lastProviderError;
+
+        for (var modelIndex = 0;
+            modelIndex < candidates.length && turn == null;
+            modelIndex++) {
+          final candidate = candidates[modelIndex];
+          activeModel = candidate;
+          final maxAttempts = candidates.length == 1 ? 3 : 2;
+
+          for (var attempt = 0; attempt < maxAttempts; attempt++) {
+            var emittedText = false;
+            try {
+              turn = await ai.completeStreaming(
+                model: candidate,
+                messages: messages,
+                tools: tools,
+                reasoningEffort: settings.reasoningEffortFor(route.model),
+                onDelta: (delta) {
+                  if (delta.isNotEmpty) emittedText = true;
+                  onTextDelta?.call(delta);
+                },
+              );
+              health.markSuccess(candidate);
+              break;
+            } on AiProviderException catch (error) {
+              lastProviderError = error;
+              if (!error.retryable || emittedText) rethrow;
+
+              health.markFailure(
+                candidate,
+                statusCode: error.statusCode,
+              );
+
+              final hasFallback = modelIndex + 1 < candidates.length;
+              final shouldFallbackNow = error.statusCode == 429 && hasFallback;
+              final lastAttempt = attempt + 1 >= maxAttempts;
+
+              if (shouldFallbackNow || lastAttempt) {
+                if (hasFallback) {
+                  final nextModel = candidates[modelIndex + 1];
+                  onProgress?.call(
+                    AgentProgressEvent(
+                      label: 'Provider busy · trying fallback',
+                      detail: nextModel,
+                      kind: 'fallback',
+                    ),
+                  );
+                }
+                break;
+              }
+
+              final wait = Duration(milliseconds: 700 * (1 << attempt));
+              onProgress?.call(
+                AgentProgressEvent(
+                  label: 'Provider busy · retrying',
+                  detail: candidate,
+                  kind: 'retry',
+                ),
+              );
+              await Future<void>.delayed(wait);
+            }
           }
         }
 
-        final completedTurn = turn!;
+        if (turn == null) {
+          if (lastProviderError != null) throw lastProviderError;
+          throw StateError('No healthy model could complete this request.');
+        }
+
+        final completedTurn = turn;
 
         messages.add({
           'role': 'assistant',
@@ -201,7 +248,7 @@ class AgentService {
         fileChanges: changes,
         pullRequests: pullRequests,
         branchUsed: activeBranch,
-        model: model,
+        model: activeModel,
       );
     } finally {
       ai.dispose();
