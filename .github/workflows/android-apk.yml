@@ -481,6 +481,16 @@ jobs:
             dist/signing-certificate.txt \
             --clobber
 
+          STABLE_TAG="v$GRADIENT_VERSION_NAME"
+          git tag "$STABLE_TAG" "$GITHUB_SHA"
+          git push origin "$STABLE_TAG"
+
+          gh release create "$STABLE_TAG" \
+            --title "Gradient $GRADIENT_VERSION_NAME" \
+            --notes "Signed Android release • $GRADIENT_VERSION_NAME ($GRADIENT_VERSION_CODE)\nCommit: $GITHUB_SHA" \
+            dist/Gradient-release.apk \
+            dist/signing-certificate.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: Gradient-release-apk
