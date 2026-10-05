@@ -73,6 +73,44 @@ class GhCommit {
   final String url;
 }
 
+class GhCommitFile {
+  const GhCommitFile({
+    required this.path,
+    required this.status,
+    required this.additions,
+    required this.deletions,
+    required this.patch,
+  });
+
+  final String path;
+  final String status;
+  final int additions;
+  final int deletions;
+  final String patch;
+}
+
+class GhCommitDetail {
+  const GhCommitDetail({
+    required this.sha,
+    required this.message,
+    required this.author,
+    required this.date,
+    required this.url,
+    required this.additions,
+    required this.deletions,
+    required this.files,
+  });
+
+  final String sha;
+  final String message;
+  final String author;
+  final String date;
+  final String url;
+  final int additions;
+  final int deletions;
+  final List<GhCommitFile> files;
+}
+
 class GhIssue {
   const GhIssue({
     required this.number,
@@ -326,6 +364,48 @@ class GhBackend {
         url: json['html_url']?.toString() ?? '',
       );
     }).where((e) => e.sha.isNotEmpty).toList(growable: false);
+  }
+
+  Future<GhCommitDetail> commitDetail(
+    String fullName,
+    String sha,
+  ) async {
+    final result = await _runner.run([
+      'api',
+      'repos/$fullName/commits/$sha',
+    ]);
+    final json = jsonDecode(result.stdout) as Map<String, dynamic>;
+    final commit =
+        json['commit'] as Map<String, dynamic>? ?? const {};
+    final author =
+        commit['author'] as Map<String, dynamic>? ?? const {};
+    final githubAuthor =
+        json['author'] as Map<String, dynamic>? ?? const {};
+    final stats =
+        json['stats'] as Map<String, dynamic>? ?? const {};
+    final filesRaw = json['files'] as List<dynamic>? ?? const [];
+
+    return GhCommitDetail(
+      sha: json['sha']?.toString() ?? sha,
+      message: commit['message']?.toString() ?? '',
+      author: githubAuthor['login']?.toString().isNotEmpty == true
+          ? githubAuthor['login'].toString()
+          : author['name']?.toString() ?? '',
+      date: author['date']?.toString() ?? '',
+      url: json['html_url']?.toString() ?? '',
+      additions: (stats['additions'] as num?)?.toInt() ?? 0,
+      deletions: (stats['deletions'] as num?)?.toInt() ?? 0,
+      files: filesRaw.whereType<Map>().map((raw) {
+        final file = Map<String, dynamic>.from(raw);
+        return GhCommitFile(
+          path: file['filename']?.toString() ?? '',
+          status: file['status']?.toString() ?? '',
+          additions: (file['additions'] as num?)?.toInt() ?? 0,
+          deletions: (file['deletions'] as num?)?.toInt() ?? 0,
+          patch: file['patch']?.toString() ?? '',
+        );
+      }).where((file) => file.path.isNotEmpty).toList(growable: false),
+    );
   }
 
   Future<List<String>> listBranches(String fullName) async {
