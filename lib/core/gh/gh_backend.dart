@@ -204,12 +204,14 @@ class GhChangedFile {
     required this.status,
     required this.additions,
     required this.deletions,
+    required this.patch,
   });
 
   final String path;
   final String status;
   final int additions;
   final int deletions;
+  final String patch;
 }
 
 class GhPullRequestDetail {
@@ -618,6 +620,7 @@ class GhBackend {
           status: file['status']?.toString() ?? '',
           additions: (file['additions'] as num?)?.toInt() ?? 0,
           deletions: (file['deletions'] as num?)?.toInt() ?? 0,
+          patch: file['patch']?.toString() ?? '',
         );
       }).where((e) => e.path.isNotEmpty).toList(growable: false),
       mergeable: pr['mergeable_state']?.toString() ?? '',
