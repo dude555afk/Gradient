@@ -22,19 +22,30 @@ class KelivoChatMessage extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     if (_isError) {
+      final rateLimited = message.content.toLowerCase().contains('rate-limit') ||
+          message.content.toLowerCase().contains('rate limit') ||
+          message.content.contains('429');
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline_rounded, size: 18, color: cs.error),
-            const SizedBox(width: 10),
+            Icon(
+              rateLimited
+                  ? Icons.schedule_rounded
+                  : Icons.error_outline_rounded,
+              size: 17,
+              color: cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 9),
             Expanded(
               child: Text(
-                message.content,
+                rateLimited
+                    ? 'Provider is busy right now.'
+                    : 'Gradient could not finish that response.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: cs.onSurfaceVariant,
-                      height: 1.45,
+                      height: 1.35,
                     ),
               ),
             ),
@@ -59,7 +70,9 @@ class KelivoChatMessage extends StatelessWidget {
             alignment:
                 _isUser ? Alignment.centerRight : Alignment.centerLeft,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 680),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width * .82,
+              ),
               child: _isUser
                   ? DecoratedBox(
                       decoration: BoxDecoration(
@@ -68,8 +81,8 @@ class KelivoChatMessage extends StatelessWidget {
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 15,
-                          vertical: 10,
+                          horizontal: 13,
+                          vertical: 9,
                         ),
                         child: SelectableText(
                           message.content,
@@ -80,7 +93,7 @@ class KelivoChatMessage extends StatelessWidget {
                   : _AssistantParagraphs(text: message.content),
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 0),
           _MessageActions(
             isUser: _isUser,
             content: message.content,
@@ -355,17 +368,22 @@ class KelivoChatComposer extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: .42),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      child: Material(
+        color: cs.surfaceContainerLow,
+        elevation: 6,
+        shadowColor: Colors.black.withValues(alpha: .22),
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: .28),
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+          child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 5, 7, 7),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -387,7 +405,7 @@ class KelivoChatComposer extends StatelessWidget {
                   disabledBorder: InputBorder.none,
                   filled: false,
                   contentPadding:
-                      EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+                      EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 ),
               ),
               Row(
@@ -407,7 +425,7 @@ class KelivoChatComposer extends StatelessWidget {
                   ),
                   const Spacer(),
                   SizedBox.square(
-                    dimension: 42,
+                    dimension: 40,
                     child: IconButton.filled(
                       tooltip: busy ? 'Working' : 'Send',
                       onPressed: enabled ? onSend : null,
@@ -425,6 +443,7 @@ class KelivoChatComposer extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
