@@ -1180,111 +1180,47 @@ class _AgentSheetState extends State<AgentSheet> {
                               _changes.isEmpty &&
                               _pullRequests.isEmpty)
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 36),
-                              child: Text(
-                                'Ask Gradient about this repo. Chats and pending task state are saved automatically.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: cs.onSurfaceVariant,
-                                ),
+                              padding: const EdgeInsets.fromLTRB(22, 44, 22, 28),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 28,
+                                    color: cs.primary,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'What are we building?',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Ask about the repo, fix code, inspect workflows, or make a change.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: cs.onSurfaceVariant,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           for (var i = 0; i < _messages.length; i++)
-                            _MessageBubble(
+                            KelivoChatMessage(
                               message: _messages[i],
                               onAction: (action) =>
                                   _messageAction(i, action),
                             ),
                           if (_busy && _progress.isNotEmpty)
-                            Card(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    for (final event in _progress)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 2,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              event.kind == 'done'
-                                                  ? Icons.check_circle_rounded
-                                                  : event.kind == 'model'
-                                                      ? Icons.auto_awesome_rounded
-                                                      : Icons
-                                                          .terminal_rounded,
-                                              size: 15,
-                                            ),
-                                            const SizedBox(width: 7),
-                                            Expanded(
-                                              child: Text(
-                                                event.detail.isEmpty
-                                                    ? event.label
-                                                    : '${event.label} • ${event.detail}',
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            KelivoProgressTimeline(events: _progress),
                           if (_busy)
                             ValueListenableBuilder<String>(
                               valueListenable: _streamingNotifier,
-                              builder: (context, text, _) {
-                                if (text.isEmpty) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Row(
-                                      children: [
-                                        SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                        SizedBox(width: 10),
-                                        Text('Gradient is working…'),
-                                      ],
-                                    ),
-                                  );
-                                }
-                                return Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Container(
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 640),
-                                    margin: const EdgeInsets.symmetric(
-                                      vertical: 5,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 11,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: cs.surfaceContainerHigh,
-                                      borderRadius: BorderRadius.circular(18),
-                                    ),
-                                    child: GradientMarkdown(
-                                      text,
-                                      streaming: true,
-                                    ),
-                                  ),
-                                );
-                              },
+                              builder: (context, text, _) =>
+                                  KelivoStreamingMessage(text: text),
                             ),
                           if (_changes.length > 1)
                             Card(
@@ -1530,7 +1466,7 @@ class _AgentSheetState extends State<AgentSheet> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
+  const KelivoChatMessage({
     required this.message,
     required this.onAction,
   });
@@ -2210,7 +2146,7 @@ class _PendingImage {
                               ),
                             ),
                           for (var i = 0; i < _messages.length; i++)
-                            _MessageBubble(
+                            KelivoChatMessage(
                               message: _messages[i],
                               onAction: (action) =>
                                   _messageAction(i, action),
@@ -2549,7 +2485,7 @@ class _PendingImage {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
+  const KelivoChatMessage({
     required this.message,
     required this.onAction,
   });
