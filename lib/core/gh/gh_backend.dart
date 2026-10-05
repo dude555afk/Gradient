@@ -881,6 +881,20 @@ class GhBackend {
     return commit['sha'] as String? ?? '';
   }
 
+  Future<void> setIssueState(
+    String fullName,
+    int number, {
+    required bool open,
+  }) async {
+    await _runner.run([
+      'issue',
+      open ? 'reopen' : 'close',
+      '$number',
+      '--repo',
+      fullName,
+    ]);
+  }
+
   Future<void> commentIssue(
     String fullName,
     int number,
