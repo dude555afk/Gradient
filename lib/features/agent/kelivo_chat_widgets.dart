@@ -326,6 +326,111 @@ Future<String?> showKelivoMessageActions(
   );
 }
 
+class KelivoChatComposer extends StatelessWidget {
+  const KelivoChatComposer({
+    super.key,
+    required this.controller,
+    required this.enabled,
+    required this.busy,
+    required this.webEnabled,
+    required this.onWebChanged,
+    required this.onAttach,
+    required this.onSend,
+    this.attachmentPreview,
+    this.maxLines = 5,
+  });
+
+  final TextEditingController controller;
+  final bool enabled;
+  final bool busy;
+  final bool webEnabled;
+  final ValueChanged<bool> onWebChanged;
+  final VoidCallback onAttach;
+  final VoidCallback onSend;
+  final Widget? attachmentPreview;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: .42),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (attachmentPreview != null) ...[
+                attachmentPreview!,
+                const SizedBox(height: 4),
+              ],
+              TextField(
+                controller: controller,
+                minLines: 1,
+                maxLines: maxLines,
+                enabled: enabled,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  hintText: 'Message Gradient…',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                  filled: false,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+                ),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Attach images',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: enabled ? onAttach : null,
+                    icon: const Icon(Icons.add_rounded),
+                  ),
+                  FilterChip(
+                    label: const Text('Web'),
+                    selected: webEnabled,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: enabled ? onWebChanged : null,
+                  ),
+                  const Spacer(),
+                  SizedBox.square(
+                    dimension: 42,
+                    child: IconButton.filled(
+                      tooltip: busy ? 'Working' : 'Send',
+                      onPressed: enabled ? onSend : null,
+                      icon: busy
+                          ? const SizedBox.square(
+                              dimension: 17,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.arrow_upward_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 List<String> splitKelivoAssistantParagraphs(String text) {
   if (text.trim().isEmpty) return <String>[text];
 
