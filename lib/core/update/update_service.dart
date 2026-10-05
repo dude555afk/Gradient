@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -40,6 +42,7 @@ class GradientUpdateService {
       : _client = client ?? http.Client(),
         _ownsClient = client == null;
 
+  static const MethodChannel _native = MethodChannel('gradient/native');
   static const String _manifestUrl =
       'https://github.com/dude555afk/Gradient/releases/download/gradient-latest/update.json';
   static const String _expectedApplicationId = 'com.dude555afk.gradient';
@@ -68,7 +71,7 @@ class GradientUpdateService {
       );
     }
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final json = _decodeJson(response.body);
 
     final latest = GradientUpdateInfo(
       versionName: (json['versionName'] ?? '').toString(),
@@ -80,6 +83,92 @@ class GradientUpdateService {
           (json['signingCertificateSha256'] ?? '').toString().toUpperCase(),
     );
 
+    _validateManifest(latest);
+
+    return GradientUpdateStatus(
+      currentVersionName: package.version,
+      currentVersionCode: int.tryParse(package.buildNumber) ?? 0,
+      latest: latest,
+    );
+  }
+
+  Future<String> downloadAndInstall(
+    GradientUpdateInfo info, {
+    void Function(int received, int? total)? onProgress,
+  }) async {
+    _validateManifest(info);
+
+    final directory = Directory(
+      '${Directory.systemTemp.path}/gradient-updates',
+    );
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+
+    final file = File('${directory.path}/Gradient-update.apk');
+    if (await file.exists()) {
+      await file.delete();
+    }
+
+    final request = http.Request('GET', Uri.parse(info.apkUrl))
+      ..headers['Cache-Control'] = 'no-cache';
+    final response = await _client.send(request);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw GradientUpdateException(
+        'APK download failed with HTTP ${response.statusCode}.',
+      );
+    }
+
+    final total = response.contentLength;
+    var received = 0;
+    final sink = file.openWrite();
+
+    try {
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+    } finally {
+      await sink.close();
+    }
+
+    if (!await file.exists() || await file.length() < 1024 * 1024) {
+      throw const GradientUpdateException(
+        'Downloaded APK is missing or unexpectedly small.',
+      );
+    }
+
+    try {
+      final result = await _native.invokeMethod<String>(
+        'installApk',
+        {
+          'path': file.path,
+          'expectedPackage': _expectedApplicationId,
+          'expectedCertificateSha256': _expectedSigningSha256,
+        },
+      );
+      return result ?? 'installer_opened';
+    } on PlatformException catch (error) {
+      throw GradientUpdateException(
+        error.message ?? 'Android rejected the downloaded update.',
+      );
+    }
+  }
+
+  static Map<String, dynamic> _decodeJson(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      return Map<String, dynamic>.from(decoded as Map);
+    } catch (_) {
+      throw const GradientUpdateException(
+        'The update channel returned invalid JSON.',
+      );
+    }
+  }
+
+  static void _validateManifest(GradientUpdateInfo latest) {
     if (latest.versionCode <= 0 || latest.apkUrl.isEmpty) {
       throw const GradientUpdateException(
         'The update channel returned invalid metadata.',
@@ -106,12 +195,6 @@ class GradientUpdateService {
         'Update rejected because its APK URL is not a trusted GitHub URL.',
       );
     }
-
-    return GradientUpdateStatus(
-      currentVersionName: package.version,
-      currentVersionCode: int.tryParse(package.buildNumber) ?? 0,
-      latest: latest,
-    );
   }
 
   static int _asInt(Object? value) {

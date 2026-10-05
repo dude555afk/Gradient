@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/agent/agent_models.dart';
 import '../../core/agent/agent_service.dart';
 import '../../core/agent/agent_session_store.dart';
+import '../../core/ai/openai_compatible_provider.dart';
 import '../../core/diff/simple_diff.dart';
 import '../../core/gh/gh_backend.dart';
 import '../../core/settings/app_settings.dart';
@@ -43,6 +45,9 @@ class _AgentSheetState extends State<AgentSheet> {
   AgentConversation? _conversation;
   String? _taskBranch;
   String _streamingText = '';
+  final _streamingNotifier = ValueNotifier<String>('');
+  bool _scrollTickPending = false;
+  bool _titleGenerationInFlight = false;
   bool _busy = false;
   bool _applying = false;
   bool _webEnabled = true;
@@ -80,6 +85,7 @@ class _AgentSheetState extends State<AgentSheet> {
       _progress.clear();
       _pendingImages.clear();
       _streamingText = '';
+      _streamingNotifier.value = '';
       _loadingSession = false;
     });
     _sessionStore.setActive(
@@ -111,20 +117,115 @@ class _AgentSheetState extends State<AgentSheet> {
   }
 
   String _deriveTitle(String existing) {
-    if (existing != 'New chat' && existing.trim().isNotEmpty) {
-      return existing;
+    final clean = existing.trim();
+    return clean.isEmpty ? 'New chat' : clean;
+  }
+
+  Future<void> _generateSmartTitleIfNeeded(
+    AiSettings settings,
+    String apiKey,
+  ) async {
+    final current = _conversation;
+    if (current == null ||
+        current.title != 'New chat' ||
+        _titleGenerationInFlight ||
+        _messages.length < 2) {
+      return;
     }
 
-    for (final message in _messages) {
-      if (message.role != 'user' || message.content.trim().isEmpty) continue;
-      final text = message.content.trim().replaceAll(RegExp(r'\s+'), ' ');
-      return text.length > 44 ? '${text.substring(0, 44)}…' : text;
+    _titleGenerationInFlight = true;
+    final provider = OpenAiCompatibleProvider(
+      baseUrl: settings.baseUrl,
+      apiKey: apiKey,
+    );
+
+    try {
+      final source = _messages
+          .take(8)
+          .map((message) {
+            final role = message.role == 'user' ? 'User' : 'Assistant';
+            final content =
+                message.content.replaceAll(RegExp(r'\s+'), ' ').trim();
+            return '$role: $content';
+          })
+          .join('\n');
+
+      final clipped = source.length > 3000
+          ? source.substring(source.length - 3000)
+          : source;
+      final model = settings.fastModel.trim().isNotEmpty
+          ? settings.fastModel.trim()
+          : settings.defaultModel.trim();
+
+      final turn = await provider.complete(
+        model: model,
+        tools: const [],
+        messages: [
+          {
+            'role': 'system',
+            'content':
+                'Create a concise chat title from the conversation. '
+                'Use the same primary language as the user. '
+                'Use 2 to 6 useful words, no quotes, no markdown, no ending punctuation. '
+                'Describe the actual topic, not generic phrases like New chat or Question. '
+                'Return only the title.',
+          },
+          {
+            'role': 'user',
+            'content': clipped,
+          },
+        ],
+      );
+
+      final generated = _cleanGeneratedTitle(turn.content);
+      final latest = _conversation;
+      if (!mounted ||
+          generated.isEmpty ||
+          latest == null ||
+          latest.id != current.id ||
+          latest.title != 'New chat') {
+        return;
+      }
+
+      final renamed = latest.copyWith(title: generated);
+      setState(() => _conversation = renamed);
+      await _sessionStore.save(renamed);
+    } catch (_) {
+      // Title generation is cosmetic and must never break chat.
+    } finally {
+      provider.dispose();
+      _titleGenerationInFlight = false;
     }
-    return existing;
+  }
+
+  String _cleanGeneratedTitle(String raw) {
+    var title = raw
+        .split('\n')
+        .first
+        .replaceAll(RegExp(r'^[#>*_\-\s]+|[#>*_\-\s]+$'), '')
+        .replaceAll('"', '')
+        .replaceAll("'", '')
+        .replaceAll(RegExp(r'[.!?:;]+$'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (title.length > 64) {
+      title = title.substring(0, 64).trimRight();
+    }
+    return title;
   }
 
   Future<void> _newConversation() async {
     if (_busy || _applying) return;
+
+    if (_conversation != null &&
+        _messages.isEmpty &&
+        _changes.isEmpty &&
+        _pullRequests.isEmpty) {
+      _controller.clear();
+      _pendingImages.clear();
+      return;
+    }
+
     await _persistSession();
     final conversation =
         await _sessionStore.create(widget.workspace.fullName);
@@ -139,50 +240,117 @@ class _AgentSheetState extends State<AgentSheet> {
         await _sessionStore.list(widget.workspace.fullName);
     if (!mounted) return;
 
+    final items = List<AgentConversation>.from(conversations);
     final selected = await showModalBottomSheet<AgentConversation>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .65,
-          child: Column(
-            children: [
-              const ListTile(
-                leading: Icon(Icons.history_rounded),
-                title: Text(
-                  'Gradient chats',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .68,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.history_rounded),
+                  title: const Text(
+                    'Gradient chats',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${items.length} saved chat${items.length == 1 ? '' : 's'}',
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: conversations.length,
-                  itemBuilder: (context, index) {
-                    final item = conversations[index];
-                    final active = item.id == _conversation?.id;
-                    return ListTile(
-                      leading: Icon(
-                        active
-                            ? Icons.chat_bubble_rounded
-                            : Icons.chat_bubble_outline_rounded,
-                      ),
-                      title: Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '${item.messages.length} messages • '
-                        '${item.updatedAt.toLocal().toString().substring(0, 16)}',
-                      ),
-                      trailing:
-                          active ? const Icon(Icons.check_rounded) : null,
-                      onTap: () => Navigator.pop(context, item),
-                    );
-                  },
+                const Divider(height: 1),
+                Expanded(
+                  child: items.isEmpty
+                      ? const Center(child: Text('No saved chats yet.'))
+                      : ListView.builder(
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final active = item.id == _conversation?.id;
+                            return ListTile(
+                              leading: Icon(
+                                active
+                                    ? Icons.chat_bubble_rounded
+                                    : Icons.chat_bubble_outline_rounded,
+                              ),
+                              title: Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${item.messages.length} messages • '
+                                '${item.updatedAt.toLocal().toString().substring(0, 16)}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (active)
+                                    const Icon(Icons.check_rounded, size: 18),
+                                  IconButton(
+                                    tooltip: 'Rename chat',
+                                    icon: const Icon(Icons.edit_outlined),
+                                    onPressed: () async {
+                                      final renamed =
+                                          await _renameStoredConversation(item);
+                                      if (renamed == null ||
+                                          !sheetContext.mounted) {
+                                        return;
+                                      }
+                                      setSheetState(() {
+                                        items[index] = renamed;
+                                      });
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete chat',
+                                    icon: const Icon(Icons.delete_outline_rounded),
+                                    onPressed: () async {
+                                      final confirmed =
+                                          await _confirmDeleteConversation(item);
+                                      if (!confirmed ||
+                                          !sheetContext.mounted) {
+                                        return;
+                                      }
+
+                                      await _sessionStore.delete(
+                                        widget.workspace.fullName,
+                                        item.id,
+                                      );
+                                      final wasActive =
+                                          item.id == _conversation?.id;
+                                      items.removeAt(index);
+
+                                      if (wasActive) {
+                                        final replacement = items.isNotEmpty
+                                            ? items.first
+                                            : await _sessionStore.create(
+                                                widget.workspace.fullName,
+                                              );
+                                        if (sheetContext.mounted) {
+                                          Navigator.pop(
+                                            sheetContext,
+                                            replacement,
+                                          );
+                                        }
+                                        return;
+                                      }
+
+                                      setSheetState(() {});
+                                    },
+                                  ),
+                                ],
+                              ),
+                              onTap: () => Navigator.pop(context, item),
+                            );
+                          },
+                        ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -191,6 +359,77 @@ class _AgentSheetState extends State<AgentSheet> {
     if (selected != null && mounted) {
       _loadConversation(selected);
     }
+  }
+
+  Future<AgentConversation?> _renameStoredConversation(
+    AgentConversation conversation,
+  ) async {
+    final controller = TextEditingController(text: conversation.title);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename chat'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(hintText: 'Chat name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text.trim(),
+            ),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (title == null || title.trim().isEmpty) return null;
+    final renamed = conversation.copyWith(
+      title: title.trim(),
+      updatedAt: DateTime.now(),
+    );
+    await _sessionStore.save(renamed);
+
+    if (mounted && _conversation?.id == renamed.id) {
+      setState(() => _conversation = renamed);
+    }
+    return renamed;
+  }
+
+  Future<bool> _confirmDeleteConversation(
+    AgentConversation conversation,
+  ) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete chat?'),
+            content: Text(
+              'Delete “${conversation.title}” and its saved task state? '
+              'This cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _renameConversation() async {
@@ -373,13 +612,23 @@ class _AgentSheetState extends State<AgentSheet> {
   }
 
   void _scrollToLatest() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-      );
+    if (_scrollTickPending) return;
+    _scrollTickPending = true;
+    Future<void>.delayed(const Duration(milliseconds: 55), () {
+      _scrollTickPending = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final target = _scrollController.position.maxScrollExtent;
+        if ((target - _scrollController.offset).abs() < 24) {
+          _scrollController.jumpTo(target);
+          return;
+        }
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 90),
+          curve: Curves.easeOut,
+        );
+      });
     });
   }
 
@@ -468,6 +717,7 @@ class _AgentSheetState extends State<AgentSheet> {
     setState(() {
       _busy = true;
       _streamingText = '';
+      _streamingNotifier.value = '';
       _progress.clear();
       _messages.add(
         AgentMessage(
@@ -497,7 +747,8 @@ class _AgentSheetState extends State<AgentSheet> {
         imageDataUris: imageDataUris,
         onTextDelta: (delta) {
           if (!mounted || delta.isEmpty) return;
-          setState(() => _streamingText += delta);
+          _streamingText += delta;
+          _streamingNotifier.value = _streamingText;
           _scrollToLatest();
         },
         onProgress: (event) {
@@ -532,13 +783,16 @@ class _AgentSheetState extends State<AgentSheet> {
           _taskBranch = used;
         }
         _streamingText = '';
+        _streamingNotifier.value = '';
       });
       await _persistSession();
+      unawaited(_generateSmartTitleIfNeeded(settings, apiKey));
       _scrollToLatest();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _streamingText = '';
+        _streamingNotifier.value = '';
         _messages.add(
           AgentMessage(
             role: 'assistant',
@@ -733,6 +987,7 @@ class _AgentSheetState extends State<AgentSheet> {
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _streamingNotifier.dispose();
     super.dispose();
   }
 
@@ -951,28 +1206,50 @@ class _AgentSheetState extends State<AgentSheet> {
                                 ),
                               ),
                             ),
-                          if (_busy && _streamingText.isNotEmpty)
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 640),
-                                margin:
-                                    const EdgeInsets.symmetric(vertical: 5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 11,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: cs.surfaceContainerHigh,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: MarkdownBody(
-                                  data: _streamingText,
-                                  selectable: true,
-                                  shrinkWrap: true,
-                                ),
-                              ),
+                          if (_busy)
+                            ValueListenableBuilder<String>(
+                              valueListenable: _streamingNotifier,
+                              builder: (context, text, _) {
+                                if (text.isEmpty) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Row(
+                                      children: [
+                                        SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text('Gradient is working…'),
+                                      ],
+                                    ),
+                                  );
+                                }
+                                return Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 640),
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 5,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 11,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerHigh,
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: SelectableText(
+                                      text,
+                                      style: const TextStyle(height: 1.35),
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           if (_changes.length > 1)
                             Card(
@@ -1100,22 +1377,6 @@ class _AgentSheetState extends State<AgentSheet> {
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-                          if (_busy && _streamingText.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text('Gradient is working…'),
-                                ],
                               ),
                             ),
                         ],
