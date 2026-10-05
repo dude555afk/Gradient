@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/agent/agent_models.dart';
+import '../../core/models/model_router.dart';
 import '../../shared/gradient_markdown.dart';
 
 class KelivoChatMessage extends StatelessWidget {
@@ -347,6 +348,8 @@ class KelivoChatComposer extends StatelessWidget {
     required this.busy,
     required this.webEnabled,
     required this.onWebChanged,
+    required this.selectedRole,
+    required this.onRoleChanged,
     required this.onAttach,
     required this.onSend,
     this.attachmentPreview,
@@ -358,6 +361,8 @@ class KelivoChatComposer extends StatelessWidget {
   final bool busy;
   final bool webEnabled;
   final ValueChanged<bool> onWebChanged;
+  final ModelRole? selectedRole;
+  final ValueChanged<ModelRole?> onRoleChanged;
   final VoidCallback onAttach;
   final VoidCallback onSend;
   final Widget? attachmentPreview;
@@ -422,6 +427,28 @@ class KelivoChatComposer extends StatelessWidget {
                     showCheckmark: false,
                     visualDensity: VisualDensity.compact,
                     onSelected: enabled ? onWebChanged : null,
+                  ),
+                  const SizedBox(width: 6),
+                  PopupMenuButton<ModelRole?>(
+                    tooltip: 'Task routing',
+                    enabled: enabled,
+                    onSelected: onRoleChanged,
+                    itemBuilder: (context) => [
+                      const PopupMenuItem<ModelRole?>(
+                        value: null,
+                        child: Text('Auto routing'),
+                      ),
+                      for (final role in ModelRole.values)
+                        PopupMenuItem<ModelRole?>(
+                          value: role,
+                          child: Text(role.label),
+                        ),
+                    ],
+                    child: Chip(
+                      avatar: const Icon(Icons.route_outlined, size: 16),
+                      label: Text(selectedRole?.label ?? 'Auto'),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                   const Spacer(),
                   SizedBox.square(
