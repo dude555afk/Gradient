@@ -782,11 +782,20 @@ class _IssueDetailPageState extends State<IssueDetailPage> {
   GhIssueDetail? _issue;
   String? _error;
   bool _loading = true;
+  bool _acting = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<GhBackend> _backend() async {
+    final token = await _settings.githubToken();
+    if (token.isEmpty) {
+      throw StateError('Connect GitHub before changing issues.');
+    }
+    return GhBackend(token: token);
   }
 
   Future<void> _load() async {
@@ -811,6 +820,108 @@ class _IssueDetailPageState extends State<IssueDetailPage> {
         _error = error.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _comment() async {
+    if (_acting) return;
+    final controller = TextEditingController();
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Comment on issue #${widget.number}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            hintText: 'Write a comment…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text.trim(),
+            ),
+            child: const Text('Comment'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (body == null || body.isEmpty || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.commentIssue(
+        widget.workspace.fullName,
+        widget.number,
+        body,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  Future<void> _toggleState() async {
+    final issue = _issue;
+    if (issue == null || _acting) return;
+    final reopen = issue.state.toLowerCase() != 'open';
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(reopen ? 'Reopen issue?' : 'Close issue?'),
+            content: Text(
+              reopen
+                  ? 'Reopen issue #${widget.number}?'
+                  : 'Close issue #${widget.number}?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(reopen ? 'Reopen' : 'Close'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.setIssueState(
+        widget.workspace.fullName,
+        widget.number,
+        open: reopen,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
     }
   }
 
@@ -839,13 +950,30 @@ class _IssueDetailPageState extends State<IssueDetailPage> {
         title: Text('Issue #${widget.number}'),
         actions: [
           IconButton(
+            tooltip: 'Comment',
+            onPressed: _acting ? null : _comment,
+            icon: const Icon(Icons.add_comment_outlined),
+          ),
+          if (issue != null)
+            IconButton(
+              tooltip: issue.state.toLowerCase() == 'open'
+                  ? 'Close issue'
+                  : 'Reopen issue',
+              onPressed: _acting ? null : _toggleState,
+              icon: Icon(
+                issue.state.toLowerCase() == 'open'
+                    ? Icons.task_alt_rounded
+                    : Icons.restart_alt_rounded,
+              ),
+            ),
+          IconButton(
             tooltip: 'Ask Gradient',
             onPressed: _askGradient,
             icon: const Icon(Icons.auto_awesome_rounded),
           ),
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _load,
+            onPressed: _acting ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -891,9 +1019,20 @@ class _IssueDetailPageState extends State<IssueDetailPage> {
                           selectable: true,
                         ),
                         const SizedBox(height: 22),
-                        Text(
-                          'Comments (${issue.comments.length})',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Comments (${issue.comments.length})',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _acting ? null : _comment,
+                              icon: const Icon(Icons.add_comment_outlined),
+                              label: const Text('Comment'),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         for (final comment in issue.comments)
@@ -945,11 +1084,20 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
   GhPullRequestDetail? _pullRequest;
   String? _error;
   bool _loading = true;
+  bool _acting = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<GhBackend> _backend() async {
+    final token = await _settings.githubToken();
+    if (token.isEmpty) {
+      throw StateError('Connect GitHub before changing pull requests.');
+    }
+    return GhBackend(token: token);
   }
 
   Future<void> _load() async {
@@ -977,6 +1125,141 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
     }
   }
 
+  Future<void> _comment() async {
+    if (_acting) return;
+    final controller = TextEditingController();
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Comment on PR #${widget.number}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            hintText: 'Write a comment…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text.trim(),
+            ),
+            child: const Text('Comment'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (body == null || body.isEmpty || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.commentPullRequest(
+        widget.workspace.fullName,
+        widget.number,
+        body,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  Future<void> _merge() async {
+    final pr = _pullRequest;
+    if (pr == null || _acting || pr.state.toLowerCase() != 'open') return;
+
+    final method = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text(
+                'Merge method',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.call_merge_rounded),
+              title: const Text('Squash and merge'),
+              subtitle: const Text('One commit on the base branch'),
+              onTap: () => Navigator.pop(context, 'squash'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.merge_rounded),
+              title: const Text('Create merge commit'),
+              onTap: () => Navigator.pop(context, 'merge'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.linear_scale_rounded),
+              title: const Text('Rebase and merge'),
+              onTap: () => Navigator.pop(context, 'rebase'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (method == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Merge PR #${widget.number}?'),
+            content: Text(
+              'Merge ${pr.headRefName} into ${pr.baseRefName} using $method?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.merge_rounded),
+                label: const Text('Merge'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.mergePullRequest(
+        widget.workspace.fullName,
+        widget.number,
+        method: method,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
   void _askGradient() {
     final pr = _pullRequest;
     showModalBottomSheet<void>(
@@ -1000,10 +1283,25 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
   @override
   Widget build(BuildContext context) {
     final pr = _pullRequest;
+    final canMerge = pr != null &&
+        pr.state.toLowerCase() == 'open' &&
+        !pr.isDraft;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('PR #${widget.number}'),
         actions: [
+          IconButton(
+            tooltip: 'Comment',
+            onPressed: _acting ? null : _comment,
+            icon: const Icon(Icons.add_comment_outlined),
+          ),
+          if (canMerge)
+            IconButton(
+              tooltip: 'Merge pull request',
+              onPressed: _acting ? null : _merge,
+              icon: const Icon(Icons.merge_rounded),
+            ),
           IconButton(
             tooltip: 'Ask Gradient',
             onPressed: _askGradient,
@@ -1011,7 +1309,7 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
           ),
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _load,
+            onPressed: _acting ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -1063,6 +1361,14 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                               Chip(label: Text(label)),
                           ],
                         ),
+                        if (canMerge) ...[
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _acting ? null : _merge,
+                            icon: const Icon(Icons.merge_rounded),
+                            label: const Text('Merge pull request'),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         MarkdownBody(
                           data: pr.body.trim().isEmpty
@@ -1089,9 +1395,20 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                           ),
                         const Divider(),
                         const SizedBox(height: 8),
-                        Text(
-                          'Comments (${pr.comments.length})',
-                          style: Theme.of(context).textTheme.titleMedium,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Comments (${pr.comments.length})',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _acting ? null : _comment,
+                              icon: const Icon(Icons.add_comment_outlined),
+                              label: const Text('Comment'),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         for (final comment in pr.comments)
