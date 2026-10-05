@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../core/gh/gh_backend.dart';
 import '../../core/github/github_models.dart';
@@ -530,11 +531,9 @@ class _IssuesList extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => GitHubWorkspacePage(
-                  initialUrl: 'https://github.com/' +
-                      workspace.fullName +
-                      '/issues/' +
-                      issue.number.toString(),
+                builder: (_) => IssueDetailPage(
+                  workspace: workspace,
+                  number: issue.number,
                 ),
               ),
             );
@@ -582,19 +581,375 @@ class _PullRequestsList extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => GitHubWorkspacePage(
-                  initialUrl: pr.url.isNotEmpty
-                      ? pr.url
-                      : 'https://github.com/' +
-                          workspace.fullName +
-                          '/pull/' +
-                          pr.number.toString(),
+                builder: (_) => PullRequestDetailPage(
+                  workspace: workspace,
+                  number: pr.number,
                 ),
               ),
             );
           },
         );
       },
+    );
+  }
+}
+
+class IssueDetailPage extends StatefulWidget {
+  const IssueDetailPage({
+    super.key,
+    required this.workspace,
+    required this.number,
+  });
+
+  final WorkspaceSelection workspace;
+  final int number;
+
+  @override
+  State<IssueDetailPage> createState() => _IssueDetailPageState();
+}
+
+class _IssueDetailPageState extends State<IssueDetailPage> {
+  final _settings = AppSettingsStore();
+  GhIssueDetail? _issue;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await _settings.githubToken();
+      final issue = await GhBackend(token: token).issueDetail(
+        widget.workspace.fullName,
+        widget.number,
+      );
+      if (!mounted) return;
+      setState(() {
+        _issue = issue;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _askGradient() {
+    final issue = _issue;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => AgentSheet(
+        workspace: widget.workspace,
+        contextText: issue == null
+            ? 'Native issue #${widget.number}.'
+            : 'Native issue #${issue.number}: ${issue.title}. '
+                'State: ${issue.state}. Author: ${issue.author}.\n'
+                'Body:\n${issue.body.length > 6000 ? issue.body.substring(0, 6000) : issue.body}',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final issue = _issue;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Issue #${widget.number}'),
+        actions: [
+          IconButton(
+            tooltip: 'Ask Gradient',
+            onPressed: _askGradient,
+            icon: const Icon(Icons.auto_awesome_rounded),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _RepoError(message: _error!, onRetry: _load)
+              : issue == null
+                  ? const Center(child: Text('Issue unavailable'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                      children: [
+                        Text(
+                          issue.title,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Chip(
+                              avatar: Icon(
+                                issue.state.toLowerCase() == 'open'
+                                    ? Icons.adjust_rounded
+                                    : Icons.check_circle_outline_rounded,
+                                size: 16,
+                              ),
+                              label: Text(issue.state),
+                            ),
+                            if (issue.author.isNotEmpty)
+                              Chip(label: Text('@${issue.author}')),
+                            for (final label in issue.labels)
+                              Chip(label: Text(label)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        MarkdownBody(
+                          data: issue.body.trim().isEmpty
+                              ? '_No description provided._'
+                              : issue.body,
+                          selectable: true,
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          'Comments (${issue.comments.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final comment in issue.comments)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '@${comment.author}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  MarkdownBody(
+                                    data: comment.body,
+                                    selectable: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+    );
+  }
+}
+
+class PullRequestDetailPage extends StatefulWidget {
+  const PullRequestDetailPage({
+    super.key,
+    required this.workspace,
+    required this.number,
+  });
+
+  final WorkspaceSelection workspace;
+  final int number;
+
+  @override
+  State<PullRequestDetailPage> createState() =>
+      _PullRequestDetailPageState();
+}
+
+class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
+  final _settings = AppSettingsStore();
+  GhPullRequestDetail? _pullRequest;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await _settings.githubToken();
+      final pr = await GhBackend(token: token).pullRequestDetail(
+        widget.workspace.fullName,
+        widget.number,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pullRequest = pr;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _askGradient() {
+    final pr = _pullRequest;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => AgentSheet(
+        workspace: widget.workspace,
+        contextText: pr == null
+            ? 'Native pull request #${widget.number}.'
+            : 'Native pull request #${pr.number}: ${pr.title}. '
+                '${pr.headRefName} -> ${pr.baseRefName}. '
+                'State: ${pr.state}; mergeable: ${pr.mergeable}; '
+                '+${pr.additions}/-${pr.deletions}; '
+                '${pr.changedFiles.length} changed files.\n'
+                'Body:\n${pr.body.length > 6000 ? pr.body.substring(0, 6000) : pr.body}',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pr = _pullRequest;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('PR #${widget.number}'),
+        actions: [
+          IconButton(
+            tooltip: 'Ask Gradient',
+            onPressed: _askGradient,
+            icon: const Icon(Icons.auto_awesome_rounded),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _RepoError(message: _error!, onRetry: _load)
+              : pr == null
+                  ? const Center(child: Text('Pull request unavailable'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                      children: [
+                        Text(
+                          pr.title,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Chip(
+                              avatar: Icon(
+                                pr.isDraft
+                                    ? Icons.edit_note_rounded
+                                    : Icons.merge_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                pr.isDraft ? 'Draft' : pr.state,
+                              ),
+                            ),
+                            if (pr.author.isNotEmpty)
+                              Chip(label: Text('@${pr.author}')),
+                            Chip(
+                              label: Text(
+                                '${pr.headRefName} → ${pr.baseRefName}',
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                '+${pr.additions} / -${pr.deletions}',
+                              ),
+                            ),
+                            if (pr.mergeable.isNotEmpty)
+                              Chip(label: Text(pr.mergeable)),
+                            for (final label in pr.labels)
+                              Chip(label: Text(label)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        MarkdownBody(
+                          data: pr.body.trim().isEmpty
+                              ? '_No description provided._'
+                              : pr.body,
+                          selectable: true,
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          'Changed files (${pr.changedFiles.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final file in pr.changedFiles)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading:
+                                const Icon(Icons.description_outlined),
+                            title: Text(file.path),
+                            subtitle: Text(file.status),
+                            trailing: Text(
+                              '+${file.additions}  -${file.deletions}',
+                            ),
+                          ),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Comments (${pr.comments.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final comment in pr.comments)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '@${comment.author}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  MarkdownBody(
+                                    data: comment.body,
+                                    selectable: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
     );
   }
 }
