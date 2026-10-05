@@ -21,6 +21,8 @@ class AiSettings {
     required this.explainerModel,
     required this.fallbackModels,
     required this.roleReasoningEffort,
+    required this.roleWebEnabled,
+    required this.maxHistoryMessages,
     required this.reasoningEffort,
     required this.githubClientId,
     required this.preferFreeModels,
@@ -43,6 +45,12 @@ class AiSettings {
 
   /// Optional per-role reasoning effort override.
   final Map<String, String> roleReasoningEffort;
+
+  /// Optional per-role web access. Missing values default to true.
+  final Map<String, bool> roleWebEnabled;
+
+  /// Number of recent chat messages sent to the model.
+  final int maxHistoryMessages;
 
   final String reasoningEffort;
   final String githubClientId;
@@ -107,6 +115,10 @@ class AiSettings {
     return override.isEmpty ? reasoningEffort.trim() : override;
   }
 
+  bool webEnabledFor(ModelRole role) {
+    return roleWebEnabled[role.key] ?? true;
+  }
+
   AiSettings copyWith({
     String? baseUrl,
     String? defaultModel,
@@ -121,6 +133,8 @@ class AiSettings {
     String? explainerModel,
     Map<String, List<String>>? fallbackModels,
     Map<String, String>? roleReasoningEffort,
+    Map<String, bool>? roleWebEnabled,
+    int? maxHistoryMessages,
     String? reasoningEffort,
     String? githubClientId,
     bool? preferFreeModels,
@@ -140,6 +154,8 @@ class AiSettings {
       fallbackModels: fallbackModels ?? this.fallbackModels,
       roleReasoningEffort:
           roleReasoningEffort ?? this.roleReasoningEffort,
+      roleWebEnabled: roleWebEnabled ?? this.roleWebEnabled,
+      maxHistoryMessages: maxHistoryMessages ?? this.maxHistoryMessages,
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
       githubClientId: githubClientId ?? this.githubClientId,
       preferFreeModels: preferFreeModels ?? this.preferFreeModels,
@@ -174,6 +190,8 @@ class AppSettingsStore {
   static const _cachedModelsKey = 'ai_cached_models_v1';
   static const _fallbackModelsKey = 'ai_fallback_models_v2';
   static const _roleReasoningKey = 'ai_role_reasoning_v1';
+  static const _roleWebKey = 'ai_role_web_v1';
+  static const _historyLimitKey = 'ai_history_limit_v1';
   static const _amoledKey = 'appearance_amoled_v1';
 
   final FlutterSecureStorage _secure;
@@ -185,6 +203,9 @@ class AppSettingsStore {
     );
     final roleReasoning = _decodeStringMap(
       prefs.getString(_roleReasoningKey),
+    );
+    final roleWebEnabled = _decodeBoolMap(
+      prefs.getString(_roleWebKey),
     );
 
     return AiSettings(
@@ -202,6 +223,9 @@ class AppSettingsStore {
       explainerModel: prefs.getString('ai_explainer_model') ?? '',
       fallbackModels: fallbackModels,
       roleReasoningEffort: roleReasoning,
+      roleWebEnabled: roleWebEnabled,
+      maxHistoryMessages:
+          (prefs.getInt(_historyLimitKey) ?? 20).clamp(4, 80),
       reasoningEffort: prefs.getString('ai_reasoning_effort') ?? '',
       githubClientId: prefs.getString('github_client_id') ?? '',
       preferFreeModels: prefs.getBool('ai_prefer_free_models') ?? true,
@@ -230,6 +254,11 @@ class AppSettingsStore {
         _roleReasoningKey,
         jsonEncode(settings.roleReasoningEffort),
       ),
+      prefs.setString(
+        _roleWebKey,
+        jsonEncode(settings.roleWebEnabled),
+      ),
+      prefs.setInt(_historyLimitKey, settings.maxHistoryMessages),
       prefs.setString('ai_reasoning_effort', settings.reasoningEffort.trim()),
       prefs.setString('github_client_id', settings.githubClientId.trim()),
       prefs.setBool('ai_prefer_free_models', settings.preferFreeModels),
@@ -329,6 +358,20 @@ class AppSettingsStore {
       return {
         for (final entry in decoded.entries)
           entry.key.toString(): entry.value.toString(),
+      };
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Map<String, bool> _decodeBoolMap(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      return {
+        for (final entry in decoded.entries)
+          entry.key.toString(): entry.value == true,
       };
     } catch (_) {
       return const {};
