@@ -62,6 +62,7 @@ class AgentService {
         'content': _systemPrompt(
           skills: route.skills.map((e) => e.name).join(', '),
           activeBranch: activeBranch,
+          imageCount: imageDataUris.length,
         ),
       },
       ...history.takeLast(16).map(
@@ -190,6 +191,7 @@ class AgentService {
   String _systemPrompt({
     required String skills,
     required String? activeBranch,
+    required int imageCount,
   }) {
     final repo = workspace;
     return '''
@@ -201,7 +203,7 @@ ${repo == null ? 'No repository API context is available for this page.' : 'Repo
 Current GitHub browser context:
 ${pageContext.trim().isEmpty ? 'No safe page excerpt is available.' : pageContext}
 
-${imageDataUris.isEmpty ? 'No image is attached to the current request.' : 'The current request includes ${imageDataUris.length} image attachment(s). Inspect them directly when relevant.'}
+${imageCount == 0 ? 'No image is attached to the current request.' : 'The current request includes $imageCount image attachment(s). Inspect them directly when relevant.'}
 
 Rules:
 - Treat the currently selected native GitHub repository and screen as the user's primary workspace.
