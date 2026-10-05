@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/agent/agent_models.dart';
 import '../../core/agent/agent_service.dart';
@@ -28,11 +32,13 @@ class _AgentSheetState extends State<AgentSheet> {
   final _scrollController = ScrollController();
   final _settings = AppSettingsStore();
   final _sessionStore = AgentSessionStore();
+  final _imagePicker = ImagePicker();
 
   final _messages = <AgentMessage>[];
   final _changes = <PendingFileChange>[];
   final _pullRequests = <PendingPullRequest>[];
   final _progress = <AgentProgressEvent>[];
+  final _pendingImages = <_PendingImage>[];
 
   AgentConversation? _conversation;
   String? _taskBranch;
@@ -72,6 +78,7 @@ class _AgentSheetState extends State<AgentSheet> {
         ..addAll(conversation.pullRequests);
       _taskBranch = conversation.taskBranch;
       _progress.clear();
+      _pendingImages.clear();
       _streamingText = '';
       _loadingSession = false;
     });
@@ -264,10 +271,69 @@ class _AgentSheetState extends State<AgentSheet> {
     });
   }
 
+  Future<void> _pickImages() async {
+    if (_busy || _applying) return;
+
+    try {
+      final picked = await _imagePicker.pickMultiImage(
+        imageQuality: 88,
+        maxWidth: 2048,
+      );
+      if (picked.isEmpty || !mounted) return;
+
+      final next = <_PendingImage>[];
+      var totalBytes = 0;
+
+      for (final file in picked.take(4)) {
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+
+        totalBytes += bytes.length;
+        if (totalBytes > 12 * 1024 * 1024) break;
+
+        final lower = file.name.toLowerCase();
+        final mime = lower.endsWith('.png')
+            ? 'image/png'
+            : lower.endsWith('.webp')
+                ? 'image/webp'
+                : 'image/jpeg';
+
+        next.add(
+          _PendingImage(
+            name: file.name,
+            bytes: bytes,
+            dataUri: 'data:$mime;base64,${base64Encode(bytes)}',
+          ),
+        );
+      }
+
+      if (!mounted) return;
+      setState(() => _pendingImages.addAll(next));
+
+      if (picked.length > 4 || totalBytes > 12 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Gradient keeps image prompts to 4 images / about 12 MB.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not attach image: $error')),
+      );
+    }
+  }
+
   Future<void> _send([String? forced]) async {
     if (_busy || _applying) return;
-    final prompt = (forced ?? _controller.text).trim();
-    if (prompt.isEmpty) return;
+    final typedPrompt = (forced ?? _controller.text).trim();
+    if (typedPrompt.isEmpty && _pendingImages.isEmpty) return;
+    final prompt = typedPrompt.isEmpty
+        ? 'Inspect the attached image(s) in the context of this repository.'
+        : typedPrompt;
 
     final settings = await _settings.load();
     if (!settings.providerReady) {
@@ -283,12 +349,23 @@ class _AgentSheetState extends State<AgentSheet> {
     final apiKey = await _settings.apiKey();
     final githubToken = await _settings.githubToken();
     final history = List<AgentMessage>.from(_messages);
+    final imageDataUris =
+        _pendingImages.map((e) => e.dataUri).toList(growable: false);
+    final imageCount = imageDataUris.length;
 
     setState(() {
       _busy = true;
       _streamingText = '';
       _progress.clear();
-      _messages.add(AgentMessage(role: 'user', content: prompt));
+      _messages.add(
+        AgentMessage(
+          role: 'user',
+          content: imageCount == 0
+              ? prompt
+              : '$prompt\n\n📎 $imageCount image${imageCount == 1 ? '' : 's'} attached',
+        ),
+      );
+      _pendingImages.clear();
       if (forced == null) _controller.clear();
     });
     await _persistSession();
@@ -305,6 +382,7 @@ class _AgentSheetState extends State<AgentSheet> {
       ).run(
         prompt: prompt,
         history: history,
+        imageDataUris: imageDataUris,
         onTextDelta: (delta) {
           if (!mounted || delta.isEmpty) return;
           setState(() => _streamingText += delta);
@@ -907,6 +985,53 @@ class _AgentSheetState extends State<AgentSheet> {
                             const EdgeInsets.fromLTRB(10, 6, 10, 8),
                         child: Column(
                           children: [
+                            if (_pendingImages.isNotEmpty)
+                              SizedBox(
+                                height: 76,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _pendingImages.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(width: 8),
+                                  itemBuilder: (context, index) {
+                                    final image = _pendingImages[index];
+                                    return Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          child: Image.memory(
+                                            image.bytes,
+                                            width: 72,
+                                            height: 72,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          right: -6,
+                                          top: -6,
+                                          child: IconButton.filledTonal(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            iconSize: 16,
+                                            tooltip: 'Remove image',
+                                            onPressed: () {
+                                              setState(
+                                                () => _pendingImages
+                                                    .removeAt(index),
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.close_rounded,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
                             TextField(
                               controller: _controller,
                               minLines: 1,
@@ -921,6 +1046,13 @@ class _AgentSheetState extends State<AgentSheet> {
                             ),
                             Row(
                               children: [
+                                IconButton(
+                                  tooltip: 'Attach images',
+                                  onPressed:
+                                      _busy || _applying ? null : _pickImages,
+                                  icon:
+                                      const Icon(Icons.add_photo_alternate_outlined),
+                                ),
                                 FilterChip(
                                   label: const Text('Web'),
                                   selected: _webEnabled,
@@ -1032,4 +1164,17 @@ class _MessageBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _PendingImage {
+  const _PendingImage({
+    required this.name,
+    required this.bytes,
+    required this.dataUri,
+  });
+
+  final String name;
+  final Uint8List bytes;
+  final String dataUri;
 }
