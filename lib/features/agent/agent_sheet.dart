@@ -807,7 +807,16 @@ class _AgentSheetState extends State<AgentSheet> {
             final duplicate = _progress.isNotEmpty &&
                 _progress.last.label == event.label &&
                 _progress.last.detail == event.detail;
-            if (!duplicate) {
+
+            final compactStatus =
+                event.kind == 'retry' || event.kind == 'fallback';
+            final lastIsCompact = _progress.isNotEmpty &&
+                (_progress.last.kind == 'retry' ||
+                    _progress.last.kind == 'fallback');
+
+            if (compactStatus && lastIsCompact) {
+              _progress[_progress.length - 1] = event;
+            } else if (!duplicate) {
               _progress.add(event);
               if (_progress.length > 8) _progress.removeAt(0);
             }
