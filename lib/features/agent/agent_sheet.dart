@@ -610,8 +610,39 @@ class _AgentSheetState extends State<AgentSheet> {
         userIndex--;
       }
       if (userIndex < 0) return;
-      final prompt = _messages[userIndex].content
-          .replaceFirst(RegExp(r'\n\n📎 \d+ images? attached
+
+      final prompt = _messages[userIndex]
+          .content
+          .replaceFirst(RegExp(r'\n\n📎 \d+ images? attached$'), '')
+          .trim();
+
+      await _createCheckpoint(label: 'Before response retry', silent: true);
+      setState(() {
+        _messages.removeRange(userIndex, _messages.length);
+        _changes.clear();
+        _pullRequests.clear();
+      });
+      await _persistSession();
+      if (mounted) await _send(prompt);
+      return;
+    }
+
+    if (action == 'delete') {
+      await _createCheckpoint(label: 'Before message delete', silent: true);
+      setState(() => _messages.removeAt(index));
+      await _persistSession();
+      return;
+    }
+
+    if (action == 'branch') {
+      final source = _conversation;
+      if (source == null) return;
+      final branched = await _sessionStore.branchFrom(source, index + 1);
+      if (!mounted) return;
+      _loadConversation(branched);
+    }
+  }
+
   void _scrollToLatest() {
     if (_scrollTickPending) return;
     _scrollTickPending = true;
