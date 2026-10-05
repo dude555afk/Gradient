@@ -205,6 +205,17 @@ class _AgentSheetState extends State<AgentSheet> {
 
   Future<void> _newConversation() async {
     if (_busy || _applying) return;
+
+    final current = _conversation;
+    if (current != null &&
+        _messages.isEmpty &&
+        _changes.isEmpty &&
+        _pullRequests.isEmpty) {
+      _controller.clear();
+      _pendingImages.clear();
+      return;
+    }
+
     await _persistSession();
     final conversation =
         await _sessionStore.create(widget.workspace.fullName);
