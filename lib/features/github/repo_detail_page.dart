@@ -738,14 +738,7 @@ class _RepoCodeSearchPageState extends State<RepoCodeSearchPage> {
                                 Navigator.of(context).push(
                                   MaterialPageRoute<void>(
                                     builder: (_) => CodeBrowserPage(
-                                      workspace: WorkspaceSelection(
-                                        fullName:
-                                            widget.workspace.fullName,
-                                        defaultBranch:
-                                            widget.workspace.defaultBranch,
-                                        branch:
-                                            widget.workspace.defaultBranch,
-                                      ),
+                                      workspace: widget.workspace,
                                       path: path,
                                       isDirectory: false,
                                       settings: _settings,
@@ -1388,10 +1381,23 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                             leading:
                                 const Icon(Icons.description_outlined),
                             title: Text(file.path),
-                            subtitle: Text(file.status),
-                            trailing: Text(
-                              '+${file.additions}  -${file.deletions}',
+                            subtitle: Text(
+                              '${file.status} • +${file.additions} / -${file.deletions}',
                             ),
+                            trailing:
+                                const Icon(Icons.chevron_right_rounded),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => PullRequestFilePage(
+                                    workspace: widget.workspace,
+                                    headRefName: pr.headRefName,
+                                    file: file,
+                                    settings: _settings,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         const Divider(),
                         const SizedBox(height: 8),
@@ -1436,6 +1442,109 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                           ),
                       ],
                     ),
+    );
+  }
+}
+
+class PullRequestFilePage extends StatelessWidget {
+  const PullRequestFilePage({
+    super.key,
+    required this.workspace,
+    required this.headRefName,
+    required this.file,
+    required this.settings,
+  });
+
+  final WorkspaceSelection workspace;
+  final String headRefName;
+  final GhChangedFile file;
+  final AppSettingsStore settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final removed = file.status.toLowerCase() == 'removed';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          file.path,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          if (!removed && headRefName.isNotEmpty)
+            IconButton(
+              tooltip: 'Open file on PR branch',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CodeBrowserPage(
+                      workspace: WorkspaceSelection(
+                        fullName: workspace.fullName,
+                        defaultBranch: workspace.defaultBranch,
+                        branch: headRefName,
+                      ),
+                      path: file.path,
+                      isDirectory: false,
+                      settings: settings,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.open_in_new_rounded),
+            ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 60),
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Chip(label: Text(file.status)),
+              Chip(label: Text('+${file.additions}')),
+              Chip(label: Text('-${file.deletions}')),
+              if (headRefName.isNotEmpty)
+                Chip(label: Text(headRefName)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (file.patch.isEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  removed
+                      ? 'This file was removed. GitHub did not provide a text patch.'
+                      : 'GitHub did not provide a text patch for this file.',
+                ),
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SelectableText(
+                  file.patch,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 11.5,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

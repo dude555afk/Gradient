@@ -6,6 +6,7 @@ import '../../core/workspace/workspace_store.dart';
 import '../agent/agent_sheet.dart';
 import '../github/repo_detail_page.dart';
 import '../settings/settings_page.dart';
+import '../workspace/github_workspace_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -108,6 +109,10 @@ class _HomePageState extends State<HomePage> {
       defaultBranch: repo.defaultBranch,
       branch: repo.defaultBranch,
     );
+    await _openWorkspace(workspace);
+  }
+
+  Future<void> _openWorkspace(WorkspaceSelection workspace) async {
     await _workspaceStore.save(workspace);
 
     if (!mounted) return;
@@ -121,19 +126,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openNotification(GhNotification notification) async {
-    final match = RegExp(r'/(issues|pulls)/(\d+)$')
-        .firstMatch(notification.subjectUrl);
-    final number =
-        match == null ? null : int.tryParse(match.group(2) ?? '');
-
-    if (number == null || notification.repository.isEmpty) return;
+    if (notification.repository.isEmpty) return;
 
     if (notification.unread) {
       try {
         final token = await _settings.githubToken();
         await GhBackend(token: token).markNotificationRead(notification.id);
       } catch (_) {
-        // Opening the item still matters more than failing a read receipt.
+        // Opening the notification is more useful than failing on read state.
       }
     }
 
@@ -143,8 +143,14 @@ class _HomePageState extends State<HomePage> {
       branch: notification.defaultBranch,
     );
 
+    final match = RegExp(r'/(issues|pulls)/(\d+)$')
+        .firstMatch(notification.subjectUrl);
+    final number =
+        match == null ? null : int.tryParse(match.group(2) ?? '');
+
     if (!mounted) return;
-    if (notification.type == 'Issue') {
+
+    if (notification.type == 'Issue' && number != null) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => IssueDetailPage(
@@ -153,7 +159,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       );
-    } else if (notification.type == 'PullRequest') {
+    } else if (notification.type == 'PullRequest' && number != null) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PullRequestDetailPage(
@@ -162,11 +168,41 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       );
+    } else {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => GitHubWorkspacePage(
+            initialUrl: _notificationWebUrl(notification),
+          ),
+        ),
+      );
     }
 
     if (mounted && notification.unread) {
       await _load();
     }
+  }
+
+  String _notificationWebUrl(GhNotification notification) {
+    final repoUrl = 'https://github.com/${notification.repository}';
+    final uri = Uri.tryParse(notification.subjectUrl);
+    if (uri == null || uri.host != 'api.github.com') return repoUrl;
+
+    final prefix = '/repos/${notification.repository}';
+    if (!uri.path.startsWith(prefix)) return repoUrl;
+
+    final rest = uri.path.substring(prefix.length);
+    if (rest.startsWith('/issues/')) return repoUrl + rest;
+    if (rest.startsWith('/pulls/')) {
+      return repoUrl + rest.replaceFirst('/pulls/', '/pull/');
+    }
+    if (rest.startsWith('/commits/')) {
+      return repoUrl + rest.replaceFirst('/commits/', '/commit/');
+    }
+    if (rest.startsWith('/discussions/')) return repoUrl + rest;
+    if (rest.startsWith('/releases/')) return '$repoUrl/releases';
+
+    return repoUrl;
   }
 
   void _openAgent() {
@@ -275,6 +311,7 @@ class _HomePageState extends State<HomePage> {
                       repos: _repos.take(8).toList(growable: false),
                       lastWorkspace: _lastWorkspace,
                       onRepo: _openRepo,
+                      onLastWorkspace: _openWorkspace,
                       onRefresh: _load,
                     ),
                   1 => _ReposView(
@@ -366,6 +403,7 @@ class _HomeFeed extends StatelessWidget {
     required this.repos,
     required this.lastWorkspace,
     required this.onRepo,
+    required this.onLastWorkspace,
     required this.onRefresh,
   });
 
@@ -374,6 +412,7 @@ class _HomeFeed extends StatelessWidget {
   final List<GhRepository> repos;
   final WorkspaceSelection? lastWorkspace;
   final Future<void> Function(GhRepository repo) onRepo;
+  final Future<void> Function(WorkspaceSelection workspace) onLastWorkspace;
   final Future<void> Function() onRefresh;
 
   @override
@@ -434,6 +473,8 @@ class _HomeFeed extends StatelessWidget {
                 subtitle: Text(
                   '${lastWorkspace!.fullName} • ${lastWorkspace!.branch}',
                 ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => onLastWorkspace(lastWorkspace!),
               ),
             ),
           const SizedBox(height: 12),
@@ -565,9 +606,6 @@ class _InboxView extends StatelessWidget {
         separatorBuilder: (_, __) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final notification = notifications[index];
-          final supported = notification.type == 'Issue' ||
-              notification.type == 'PullRequest';
-
           return ListTile(
             leading: Icon(
               notification.type == 'PullRequest'
@@ -586,13 +624,17 @@ class _InboxView extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            trailing: notification.unread
-                ? const Icon(Icons.circle, size: 10)
-                : supported
-                    ? const Icon(Icons.chevron_right_rounded)
-                    : null,
-            onTap:
-                supported ? () => onNotification(notification) : null,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (notification.unread) ...[
+                  const Icon(Icons.circle, size: 10),
+                  const SizedBox(width: 8),
+                ],
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+            onTap: () => onNotification(notification),
           );
         },
       ),
