@@ -41,6 +41,25 @@ class ModelRouter {
     }
 
     if (_containsAny(text, [
+      'ocr',
+      'extract text from image',
+      'read text from image',
+      'transcribe screenshot',
+    ])) {
+      return ModelRole.ocr;
+    }
+
+    if (_containsAny(text, [
+      'screenshot',
+      'image',
+      'visual bug',
+      'ui looks',
+      'photo',
+    ])) {
+      return ModelRole.vision;
+    }
+
+    if (_containsAny(text, [
       'review',
       'audit',
       'security',
