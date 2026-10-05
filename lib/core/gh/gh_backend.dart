@@ -411,6 +411,133 @@ class GhBackend {
     return branch;
   }
 
+  Future<String> writeFilesBatch({
+    required String fullName,
+    required String branch,
+    required Map<String, String> files,
+    required String message,
+  }) async {
+    if (files.isEmpty) {
+      throw const GhCommandException(-1, 'No files were provided to commit.');
+    }
+
+    final refResult = await _runner.run([
+      'api',
+      'repos/$fullName/git/ref/heads/$branch',
+    ]);
+    final refJson = jsonDecode(refResult.stdout) as Map<String, dynamic>;
+    final object = refJson['object'] as Map<String, dynamic>? ?? const {};
+    final parentSha = object['sha']?.toString() ?? '';
+    if (parentSha.isEmpty) {
+      throw const GhCommandException(-1, 'Could not resolve branch head.');
+    }
+
+    final commitResult = await _runner.run([
+      'api',
+      'repos/$fullName/git/commits/$parentSha',
+    ]);
+    final commitJson =
+        jsonDecode(commitResult.stdout) as Map<String, dynamic>;
+    final parentTree =
+        commitJson['tree'] as Map<String, dynamic>? ?? const {};
+    final baseTreeSha = parentTree['sha']?.toString() ?? '';
+    if (baseTreeSha.isEmpty) {
+      throw const GhCommandException(-1, 'Could not resolve base tree.');
+    }
+
+    final treeEntries = <Map<String, dynamic>>[];
+    for (final entry in files.entries) {
+      final blob = await _runner.run(
+        [
+          'api',
+          '--method',
+          'POST',
+          'repos/$fullName/git/blobs',
+          '--input',
+          '-',
+        ],
+        stdin: jsonEncode({
+          'content': entry.value,
+          'encoding': 'utf-8',
+        }),
+      );
+      final blobJson = jsonDecode(blob.stdout) as Map<String, dynamic>;
+      final blobSha = blobJson['sha']?.toString() ?? '';
+      if (blobSha.isEmpty) {
+        throw GhCommandException(
+          -1,
+          'Could not create Git blob for ${entry.key}.',
+        );
+      }
+
+      treeEntries.add({
+        'path': entry.key,
+        'mode': '100644',
+        'type': 'blob',
+        'sha': blobSha,
+      });
+    }
+
+    final treeResult = await _runner.run(
+      [
+        'api',
+        '--method',
+        'POST',
+        'repos/$fullName/git/trees',
+        '--input',
+        '-',
+      ],
+      stdin: jsonEncode({
+        'base_tree': baseTreeSha,
+        'tree': treeEntries,
+      }),
+    );
+    final treeJson = jsonDecode(treeResult.stdout) as Map<String, dynamic>;
+    final treeSha = treeJson['sha']?.toString() ?? '';
+    if (treeSha.isEmpty) {
+      throw const GhCommandException(-1, 'Could not create Git tree.');
+    }
+
+    final newCommit = await _runner.run(
+      [
+        'api',
+        '--method',
+        'POST',
+        'repos/$fullName/git/commits',
+        '--input',
+        '-',
+      ],
+      stdin: jsonEncode({
+        'message': message,
+        'tree': treeSha,
+        'parents': [parentSha],
+      }),
+    );
+    final newCommitJson =
+        jsonDecode(newCommit.stdout) as Map<String, dynamic>;
+    final newCommitSha = newCommitJson['sha']?.toString() ?? '';
+    if (newCommitSha.isEmpty) {
+      throw const GhCommandException(-1, 'Could not create Git commit.');
+    }
+
+    await _runner.run(
+      [
+        'api',
+        '--method',
+        'PATCH',
+        'repos/$fullName/git/refs/heads/$branch',
+        '--input',
+        '-',
+      ],
+      stdin: jsonEncode({
+        'sha': newCommitSha,
+        'force': false,
+      }),
+    );
+
+    return newCommitSha;
+  }
+
   Future<String> writeFile({
     required String fullName,
     required String path,
