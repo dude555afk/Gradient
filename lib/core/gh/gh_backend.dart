@@ -881,6 +881,63 @@ class GhBackend {
     return commit['sha'] as String? ?? '';
   }
 
+  Future<void> commentIssue(
+    String fullName,
+    int number,
+    String body,
+  ) async {
+    final text = body.trim();
+    if (text.isEmpty) return;
+    await _runner.run([
+      'issue',
+      'comment',
+      '$number',
+      '--repo',
+      fullName,
+      '--body',
+      text,
+    ]);
+  }
+
+  Future<void> commentPullRequest(
+    String fullName,
+    int number,
+    String body,
+  ) async {
+    final text = body.trim();
+    if (text.isEmpty) return;
+    await _runner.run([
+      'pr',
+      'comment',
+      '$number',
+      '--repo',
+      fullName,
+      '--body',
+      text,
+    ]);
+  }
+
+  Future<void> mergePullRequest(
+    String fullName,
+    int number, {
+    String method = 'squash',
+  }) async {
+    final flag = switch (method) {
+      'merge' => '--merge',
+      'rebase' => '--rebase',
+      _ => '--squash',
+    };
+
+    await _runner.run([
+      'pr',
+      'merge',
+      '$number',
+      '--repo',
+      fullName,
+      flag,
+    ]);
+  }
+
   Future<String> createPullRequest({
     required String fullName,
     required String title,
