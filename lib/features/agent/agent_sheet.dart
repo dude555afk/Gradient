@@ -1243,10 +1243,9 @@ class _AgentSheetState extends State<AgentSheet> {
                                       color: cs.surfaceContainerHigh,
                                       borderRadius: BorderRadius.circular(18),
                                     ),
-                                    child: MarkdownBody(
-                                      data: text,
-                                      selectable: true,
-                                      shrinkWrap: true,
+                                    child: SelectableText(
+                                      text,
+                                      style: const TextStyle(height: 1.35),
                                     ),
                                   ),
                                 );
