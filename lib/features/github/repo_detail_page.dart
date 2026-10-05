@@ -672,7 +672,6 @@ class _RepoCodeSearchPageState extends State<RepoCodeSearchPage> {
             padding: const EdgeInsets.all(12),
             child: SearchBar(
               controller: _query,
-              autofocus: true,
               hintText: 'Search this repository',
               leading: const Icon(Icons.search_rounded),
               trailing: [
