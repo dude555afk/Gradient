@@ -30,8 +30,14 @@ class AgentService {
   Future<AgentResult> run({
     required String prompt,
     required List<AgentMessage> history,
+    List<String> imageDataUris = const [],
+    void Function(String delta)? onTextDelta,
+    void Function(AgentProgressEvent event)? onProgress,
   }) async {
-    final route = const TaskRouter().route(prompt);
+    final route = const TaskRouter().route(
+      prompt,
+      hasImages: imageDataUris.isNotEmpty,
+    );
     final model = settings.modelFor(route.model);
     if (model.isEmpty) {
       throw StateError('No model configured for ${route.model.label}.');
@@ -42,8 +48,6 @@ class AgentService {
       apiKey: apiKey,
     );
 
-    // Public repositories can be inspected anonymously. A token is only
-    // mandatory when GitHub itself requires authentication.
     final github =
         workspace == null ? null : GhBackend(token: githubToken);
     final web = webEnabled ? WebResearchService() : null;
@@ -58,12 +62,28 @@ class AgentService {
         'content': _systemPrompt(
           skills: route.skills.map((e) => e.name).join(', '),
           activeBranch: activeBranch,
+          imageCount: imageDataUris.length,
         ),
       },
       ...history.takeLast(16).map(
             (e) => {'role': e.role, 'content': e.content},
           ),
-      {'role': 'user', 'content': prompt},
+      {
+        'role': 'user',
+        'content': imageDataUris.isEmpty
+            ? prompt
+            : [
+                {
+                  'type': 'text',
+                  'text': prompt,
+                },
+                for (final dataUri in imageDataUris)
+                  {
+                    'type': 'image_url',
+                    'image_url': {'url': dataUri},
+                  },
+              ],
+      },
     ];
 
     final tools = _tools(
@@ -74,12 +94,21 @@ class AgentService {
 
     String finalText = '';
     try {
-      for (var round = 0; round < 8; round++) {
-        final turn = await ai.complete(
+      for (var round = 0; round < 14; round++) {
+        onProgress?.call(
+          AgentProgressEvent(
+            label: round == 0 ? 'Thinking' : 'Continuing',
+            detail: model,
+            kind: 'model',
+          ),
+        );
+
+        final turn = await ai.completeStreaming(
           model: model,
           messages: messages,
           tools: tools,
           reasoningEffort: settings.reasoningEffort,
+          onDelta: onTextDelta,
         );
 
         messages.add({
@@ -95,14 +124,29 @@ class AgentService {
         }
 
         for (final call in turn.toolCalls) {
-          final result = await _runTool(
-            call,
-            github: github,
-            web: web,
-            activeBranch: activeBranch,
-            changes: changes,
-            pullRequests: pullRequests,
+          onProgress?.call(
+            AgentProgressEvent(
+              label: _progressLabel(call.name),
+              detail: _progressDetail(call),
+              kind: 'tool',
+            ),
           );
+
+          _ToolResult result;
+          try {
+            result = await _runTool(
+              call,
+              github: github,
+              web: web,
+              activeBranch: activeBranch,
+              changes: changes,
+              pullRequests: pullRequests,
+            );
+          } on GhCommandException catch (error) {
+            result = _ToolResult(
+              _githubToolError(call.name, error),
+            );
+          }
 
           if (call.name == 'github_create_branch' &&
               result.updatedBranch != null) {
@@ -124,6 +168,13 @@ class AgentService {
             : 'The agent reached its tool-call limit before producing a final response.';
       }
 
+      onProgress?.call(
+        const AgentProgressEvent(
+          label: 'Done',
+          kind: 'done',
+        ),
+      );
+
       return AgentResult(
         text: finalText,
         fileChanges: changes,
@@ -140,6 +191,7 @@ class AgentService {
   String _systemPrompt({
     required String skills,
     required String? activeBranch,
+    required int imageCount,
   }) {
     final repo = workspace;
     return '''
@@ -151,15 +203,20 @@ ${repo == null ? 'No repository API context is available for this page.' : 'Repo
 Current GitHub browser context:
 ${pageContext.trim().isEmpty ? 'No safe page excerpt is available.' : pageContext}
 
+${imageCount == 0 ? 'No image is attached to the current request.' : 'The current request includes $imageCount image attachment(s). Inspect them directly when relevant.'}
+
 Rules:
 - Treat the currently selected native GitHub repository and screen as the user's primary workspace.
 - Use the current native screen/repository context before asking the user to repeat what they are looking at.
 - Inspect relevant repository files with GitHub tools before proposing edits when those tools are available.
+- A GitHub tool may report a missing path or other recoverable error. Try another relevant path or continue with the information you do have instead of aborting the whole task.
 - Never expose credentials, tokens, .env contents, keystores, signing secrets, private keys, or sensitive configuration.
 - Never modify the default branch directly.
 - File edits must go through propose_file_change with the COMPLETE replacement file content. Gradient shows a diff and requires explicit user approval before committing.
 - Pull requests must go through propose_pull_request and require explicit user approval.
+- Use github_repo_map and github_search_code before blindly guessing file locations in unfamiliar repositories.
 - Use workflow tools to inspect actual failed runs/jobs/logs before diagnosing CI failures.
+- You may rerun or cancel workflows only when the user's request clearly asks for that action.
 - Search official documentation for version-sensitive facts when web tools are available.
 - Prefer minimal, targeted changes.
 ''';
@@ -233,6 +290,20 @@ Rules:
           },
           const ['job_id'],
         ),
+        _tool(
+          'github_repo_map',
+          'Get a recursive repository path map for the active branch. Use this to understand repository structure without opening every directory.',
+          {},
+          const [],
+        ),
+        _tool(
+          'github_search_code',
+          'Search code in the current GitHub repository.',
+          {
+            'query': {'type': 'string'},
+          },
+          const ['query'],
+        ),
       ]);
 
       if (canMutateGithub) {
@@ -264,6 +335,23 @@ Rules:
               'base': {'type': 'string'},
             },
             const ['title', 'body'],
+          ),
+          _tool(
+            'github_rerun_workflow',
+            'Rerun a GitHub Actions workflow run. Use only when the user asked to rerun it.',
+            {
+              'run_id': {'type': 'integer'},
+              'failed_only': {'type': 'boolean'},
+            },
+            const ['run_id'],
+          ),
+          _tool(
+            'github_cancel_workflow',
+            'Cancel a running GitHub Actions workflow. Use only when the user asked to cancel it.',
+            {
+              'run_id': {'type': 'integer'},
+            },
+            const ['run_id'],
           ),
         ]);
       }
@@ -383,6 +471,25 @@ Rules:
           log.length > 18000 ? log.substring(log.length - 18000) : log,
         );
 
+
+      case 'github_repo_map':
+        final paths = await github!.repositoryMap(
+          repo!.fullName,
+          ref: activeBranch ?? repo.branch,
+        );
+        return _ToolResult(
+          jsonEncode({
+            'branch': activeBranch ?? repo.branch,
+            'count': paths.length,
+            'paths': paths,
+          }),
+        );
+
+      case 'github_search_code':
+        final query = args['query'] as String? ?? '';
+        final results = await github!.searchCode(repo!.fullName, query);
+        return _ToolResult(jsonEncode(results));
+
       case 'propose_file_change':
         final path = args['path'] as String? ?? '';
         if (isProtectedRepositoryPath(path)) {
@@ -438,9 +545,85 @@ Rules:
           'Pull request proposal recorded for user approval.',
         );
 
+
+      case 'github_rerun_workflow':
+        final runId = _intArg(args['run_id']);
+        final failedOnly = args['failed_only'] as bool? ?? false;
+        await github!.rerunWorkflow(
+          repo!.fullName,
+          runId,
+          failedOnly: failedOnly,
+        );
+        return _ToolResult(
+          failedOnly
+              ? 'Rerunning failed jobs for workflow run $runId.'
+              : 'Rerunning workflow run $runId.',
+        );
+
+      case 'github_cancel_workflow':
+        final runId = _intArg(args['run_id']);
+        await github!.cancelWorkflow(repo!.fullName, runId);
+        return _ToolResult('Cancelled workflow run $runId.');
+
       default:
         throw UnsupportedError('Unknown agent tool: ${call.name}');
     }
+  }
+
+  String _progressLabel(String toolName) {
+    return switch (toolName) {
+      'web_search' => 'Searching the web',
+      'web_open' => 'Reading a web page',
+      'github_read_file' => 'Reading a file',
+      'github_list_files' => 'Listing repository files',
+      'github_repo_map' => 'Mapping the repository',
+      'github_search_code' => 'Searching repository code',
+      'github_workflow_runs' => 'Checking workflow runs',
+      'github_workflow_jobs' => 'Inspecting workflow jobs',
+      'github_workflow_job_log' => 'Reading workflow logs',
+      'github_create_branch' => 'Creating a task branch',
+      'propose_file_change' => 'Preparing a file change',
+      'propose_pull_request' => 'Preparing a pull request',
+      'github_rerun_workflow' => 'Rerunning a workflow',
+      'github_cancel_workflow' => 'Cancelling a workflow',
+      _ => 'Using $toolName',
+    };
+  }
+
+  String _progressDetail(AiToolCall call) {
+    final args = call.arguments;
+    for (final key in const ['path', 'query', 'run_id', 'job_id', 'name']) {
+      final value = args[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        final text = value.toString().trim();
+        return text.length > 80 ? '${text.substring(0, 80)}…' : text;
+      }
+    }
+    return '';
+  }
+
+  String _githubToolError(String toolName, GhCommandException error) {
+    final message = error.message.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final lower = message.toLowerCase();
+
+    if (error.exitCode == 1 &&
+        (lower.contains('404') || lower.contains('not found'))) {
+      return jsonEncode({
+        'ok': false,
+        'tool': toolName,
+        'error': 'not_found',
+        'message':
+            'GitHub could not find that path/resource. Try another likely path, ref, run, or job and continue instead of aborting.',
+      });
+    }
+
+    return jsonEncode({
+      'ok': false,
+      'tool': toolName,
+      'error': 'github_cli_error',
+      'exit_code': error.exitCode,
+      'message': message.length > 600 ? '${message.substring(0, 600)}…' : message,
+    });
   }
 
   int _intArg(Object? value) {

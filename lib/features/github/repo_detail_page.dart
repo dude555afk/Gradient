@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../core/gh/gh_backend.dart';
 import '../../core/github/github_models.dart';
@@ -30,6 +31,7 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
   List<GitHubEntry> _entries = const [];
   List<GhIssue> _issues = const [];
   List<GhPullRequest> _pullRequests = const [];
+  List<GhCommit> _commits = const [];
   List<GitHubWorkflowRun> _runs = const [];
 
   @override
@@ -61,6 +63,10 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
         ),
         gh.listIssues(_workspace.fullName),
         gh.listPullRequests(_workspace.fullName),
+        gh.listCommits(
+          _workspace.fullName,
+          ref: _workspace.branch,
+        ),
         gh.listWorkflowRuns(_workspace.fullName),
       ]);
 
@@ -69,7 +75,8 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
         _entries = results[0] as List<GitHubEntry>;
         _issues = results[1] as List<GhIssue>;
         _pullRequests = results[2] as List<GhPullRequest>;
-        _runs = results[3] as List<GitHubWorkflowRun>;
+        _commits = results[3] as List<GhCommit>;
+        _runs = results[4] as List<GitHubWorkflowRun>;
         _loading = false;
       });
     } catch (error) {
@@ -144,7 +151,7 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           titleSpacing: 12,
@@ -176,6 +183,19 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
           ),
           actions: [
             IconButton(
+              tooltip: 'Search code',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RepoCodeSearchPage(
+                      workspace: _workspace,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.manage_search_rounded),
+            ),
+            IconButton(
               tooltip: 'Open on GitHub',
               onPressed: () {
                 Navigator.of(context).push(
@@ -200,6 +220,7 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
               Tab(text: 'Code'),
               Tab(text: 'Issues'),
               Tab(text: 'Pull requests'),
+              Tab(text: 'Commits'),
               Tab(text: 'Actions'),
             ],
           ),
@@ -237,6 +258,11 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
                       _PullRequestsList(
                         workspace: _workspace,
                         pullRequests: _pullRequests,
+                      ),
+                      _CommitsList(
+                        workspace: _workspace,
+                        commits: _commits,
+                        onAgent: _openAgent,
                       ),
                       _ActionsList(
                         workspace: _workspace,
@@ -530,11 +556,9 @@ class _IssuesList extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => GitHubWorkspacePage(
-                  initialUrl: 'https://github.com/' +
-                      workspace.fullName +
-                      '/issues/' +
-                      issue.number.toString(),
+                builder: (_) => IssueDetailPage(
+                  workspace: workspace,
+                  number: issue.number,
                 ),
               ),
             );
@@ -582,19 +606,1095 @@ class _PullRequestsList extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => GitHubWorkspacePage(
-                  initialUrl: pr.url.isNotEmpty
-                      ? pr.url
-                      : 'https://github.com/' +
-                          workspace.fullName +
-                          '/pull/' +
-                          pr.number.toString(),
+                builder: (_) => PullRequestDetailPage(
+                  workspace: workspace,
+                  number: pr.number,
                 ),
               ),
             );
           },
         );
       },
+    );
+  }
+}
+
+class RepoCodeSearchPage extends StatefulWidget {
+  const RepoCodeSearchPage({
+    super.key,
+    required this.workspace,
+  });
+
+  final WorkspaceSelection workspace;
+
+  @override
+  State<RepoCodeSearchPage> createState() => _RepoCodeSearchPageState();
+}
+
+class _RepoCodeSearchPageState extends State<RepoCodeSearchPage> {
+  final _query = TextEditingController();
+  final _settings = AppSettingsStore();
+  List<Map<String, dynamic>> _results = const [];
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _search() async {
+    final query = _query.text.trim();
+    if (query.isEmpty || _loading) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final token = await _settings.githubToken();
+      final results =
+          await GhBackend(token: token).searchCode(
+        widget.workspace.fullName,
+        query,
+      );
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search code')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SearchBar(
+              controller: _query,
+              hintText: 'Search this repository',
+              leading: const Icon(Icons.search_rounded),
+              trailing: [
+                IconButton(
+                  onPressed: _loading ? null : _search,
+                  icon: _loading
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.arrow_forward_rounded),
+                ),
+              ],
+              onSubmitted: (_) => _search(),
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                _error!,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          Expanded(
+            child: _results.isEmpty && !_loading
+                ? const Center(
+                    child: Text(
+                      'Search file names, symbols, strings, or code.',
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: _results.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final result = _results[index];
+                      final path = result['path']?.toString() ?? '';
+                      return ListTile(
+                        leading:
+                            const Icon(Icons.manage_search_rounded),
+                        title: Text(path),
+                        subtitle: Text(
+                          result['repository']?.toString() ??
+                              widget.workspace.fullName,
+                        ),
+                        trailing:
+                            const Icon(Icons.chevron_right_rounded),
+                        onTap: path.isEmpty
+                            ? null
+                            : () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => CodeBrowserPage(
+                                      workspace: WorkspaceSelection(
+                                        fullName:
+                                            widget.workspace.fullName,
+                                        defaultBranch:
+                                            widget.workspace.defaultBranch,
+                                        branch:
+                                            widget.workspace.defaultBranch,
+                                      ),
+                                      path: path,
+                                      isDirectory: false,
+                                      settings: _settings,
+                                    ),
+                                  ),
+                                );
+                              },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class IssueDetailPage extends StatefulWidget {
+  const IssueDetailPage({
+    super.key,
+    required this.workspace,
+    required this.number,
+  });
+
+  final WorkspaceSelection workspace;
+  final int number;
+
+  @override
+  State<IssueDetailPage> createState() => _IssueDetailPageState();
+}
+
+class _IssueDetailPageState extends State<IssueDetailPage> {
+  final _settings = AppSettingsStore();
+  GhIssueDetail? _issue;
+  String? _error;
+  bool _loading = true;
+  bool _acting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<GhBackend> _backend() async {
+    final token = await _settings.githubToken();
+    if (token.isEmpty) {
+      throw StateError('Connect GitHub before changing issues.');
+    }
+    return GhBackend(token: token);
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await _settings.githubToken();
+      final issue = await GhBackend(token: token).issueDetail(
+        widget.workspace.fullName,
+        widget.number,
+      );
+      if (!mounted) return;
+      setState(() {
+        _issue = issue;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _comment() async {
+    if (_acting) return;
+    final controller = TextEditingController();
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Comment on issue #${widget.number}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            hintText: 'Write a comment…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text.trim(),
+            ),
+            child: const Text('Comment'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (body == null || body.isEmpty || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.commentIssue(
+        widget.workspace.fullName,
+        widget.number,
+        body,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  Future<void> _toggleState() async {
+    final issue = _issue;
+    if (issue == null || _acting) return;
+    final reopen = issue.state.toLowerCase() != 'open';
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(reopen ? 'Reopen issue?' : 'Close issue?'),
+            content: Text(
+              reopen
+                  ? 'Reopen issue #${widget.number}?'
+                  : 'Close issue #${widget.number}?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(reopen ? 'Reopen' : 'Close'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.setIssueState(
+        widget.workspace.fullName,
+        widget.number,
+        open: reopen,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  void _askGradient() {
+    final issue = _issue;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => AgentSheet(
+        workspace: widget.workspace,
+        contextText: issue == null
+            ? 'Native issue #${widget.number}.'
+            : 'Native issue #${issue.number}: ${issue.title}. '
+                'State: ${issue.state}. Author: ${issue.author}.\n'
+                'Body:\n${issue.body.length > 6000 ? issue.body.substring(0, 6000) : issue.body}',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final issue = _issue;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Issue #${widget.number}'),
+        actions: [
+          IconButton(
+            tooltip: 'Comment',
+            onPressed: _acting ? null : _comment,
+            icon: const Icon(Icons.add_comment_outlined),
+          ),
+          if (issue != null)
+            IconButton(
+              tooltip: issue.state.toLowerCase() == 'open'
+                  ? 'Close issue'
+                  : 'Reopen issue',
+              onPressed: _acting ? null : _toggleState,
+              icon: Icon(
+                issue.state.toLowerCase() == 'open'
+                    ? Icons.task_alt_rounded
+                    : Icons.restart_alt_rounded,
+              ),
+            ),
+          IconButton(
+            tooltip: 'Ask Gradient',
+            onPressed: _askGradient,
+            icon: const Icon(Icons.auto_awesome_rounded),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _acting ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _RepoError(message: _error!, onRetry: _load)
+              : issue == null
+                  ? const Center(child: Text('Issue unavailable'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                      children: [
+                        Text(
+                          issue.title,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Chip(
+                              avatar: Icon(
+                                issue.state.toLowerCase() == 'open'
+                                    ? Icons.adjust_rounded
+                                    : Icons.check_circle_outline_rounded,
+                                size: 16,
+                              ),
+                              label: Text(issue.state),
+                            ),
+                            if (issue.author.isNotEmpty)
+                              Chip(label: Text('@${issue.author}')),
+                            for (final label in issue.labels)
+                              Chip(label: Text(label)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        MarkdownBody(
+                          data: issue.body.trim().isEmpty
+                              ? '_No description provided._'
+                              : issue.body,
+                          selectable: true,
+                        ),
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Comments (${issue.comments.length})',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _acting ? null : _comment,
+                              icon: const Icon(Icons.add_comment_outlined),
+                              label: const Text('Comment'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        for (final comment in issue.comments)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '@${comment.author}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  MarkdownBody(
+                                    data: comment.body,
+                                    selectable: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+    );
+  }
+}
+
+class PullRequestDetailPage extends StatefulWidget {
+  const PullRequestDetailPage({
+    super.key,
+    required this.workspace,
+    required this.number,
+  });
+
+  final WorkspaceSelection workspace;
+  final int number;
+
+  @override
+  State<PullRequestDetailPage> createState() =>
+      _PullRequestDetailPageState();
+}
+
+class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
+  final _settings = AppSettingsStore();
+  GhPullRequestDetail? _pullRequest;
+  String? _error;
+  bool _loading = true;
+  bool _acting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<GhBackend> _backend() async {
+    final token = await _settings.githubToken();
+    if (token.isEmpty) {
+      throw StateError('Connect GitHub before changing pull requests.');
+    }
+    return GhBackend(token: token);
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await _settings.githubToken();
+      final pr = await GhBackend(token: token).pullRequestDetail(
+        widget.workspace.fullName,
+        widget.number,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pullRequest = pr;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _comment() async {
+    if (_acting) return;
+    final controller = TextEditingController();
+    final body = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Comment on PR #${widget.number}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            hintText: 'Write a comment…',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text.trim(),
+            ),
+            child: const Text('Comment'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (body == null || body.isEmpty || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.commentPullRequest(
+        widget.workspace.fullName,
+        widget.number,
+        body,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  Future<void> _merge() async {
+    final pr = _pullRequest;
+    if (pr == null || _acting || pr.state.toLowerCase() != 'open') return;
+
+    final method = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text(
+                'Merge method',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.call_merge_rounded),
+              title: const Text('Squash and merge'),
+              subtitle: const Text('One commit on the base branch'),
+              onTap: () => Navigator.pop(context, 'squash'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.merge_rounded),
+              title: const Text('Create merge commit'),
+              onTap: () => Navigator.pop(context, 'merge'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.linear_scale_rounded),
+              title: const Text('Rebase and merge'),
+              onTap: () => Navigator.pop(context, 'rebase'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (method == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Merge PR #${widget.number}?'),
+            content: Text(
+              'Merge ${pr.headRefName} into ${pr.baseRefName} using $method?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.merge_rounded),
+                label: const Text('Merge'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed || !mounted) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.mergePullRequest(
+        widget.workspace.fullName,
+        widget.number,
+        method: method,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  void _askGradient() {
+    final pr = _pullRequest;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => AgentSheet(
+        workspace: widget.workspace,
+        contextText: pr == null
+            ? 'Native pull request #${widget.number}.'
+            : 'Native pull request #${pr.number}: ${pr.title}. '
+                '${pr.headRefName} -> ${pr.baseRefName}. '
+                'State: ${pr.state}; mergeable: ${pr.mergeable}; '
+                '+${pr.additions}/-${pr.deletions}; '
+                '${pr.changedFiles.length} changed files.\n'
+                'Body:\n${pr.body.length > 6000 ? pr.body.substring(0, 6000) : pr.body}',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pr = _pullRequest;
+    final canMerge = pr != null &&
+        pr.state.toLowerCase() == 'open' &&
+        !pr.isDraft;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('PR #${widget.number}'),
+        actions: [
+          IconButton(
+            tooltip: 'Comment',
+            onPressed: _acting ? null : _comment,
+            icon: const Icon(Icons.add_comment_outlined),
+          ),
+          if (canMerge)
+            IconButton(
+              tooltip: 'Merge pull request',
+              onPressed: _acting ? null : _merge,
+              icon: const Icon(Icons.merge_rounded),
+            ),
+          IconButton(
+            tooltip: 'Ask Gradient',
+            onPressed: _askGradient,
+            icon: const Icon(Icons.auto_awesome_rounded),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _acting ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _RepoError(message: _error!, onRetry: _load)
+              : pr == null
+                  ? const Center(child: Text('Pull request unavailable'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                      children: [
+                        Text(
+                          pr.title,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Chip(
+                              avatar: Icon(
+                                pr.isDraft
+                                    ? Icons.edit_note_rounded
+                                    : Icons.merge_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                pr.isDraft ? 'Draft' : pr.state,
+                              ),
+                            ),
+                            if (pr.author.isNotEmpty)
+                              Chip(label: Text('@${pr.author}')),
+                            Chip(
+                              label: Text(
+                                '${pr.headRefName} → ${pr.baseRefName}',
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                '+${pr.additions} / -${pr.deletions}',
+                              ),
+                            ),
+                            if (pr.mergeable.isNotEmpty)
+                              Chip(label: Text(pr.mergeable)),
+                            for (final label in pr.labels)
+                              Chip(label: Text(label)),
+                          ],
+                        ),
+                        if (canMerge) ...[
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _acting ? null : _merge,
+                            icon: const Icon(Icons.merge_rounded),
+                            label: const Text('Merge pull request'),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        MarkdownBody(
+                          data: pr.body.trim().isEmpty
+                              ? '_No description provided._'
+                              : pr.body,
+                          selectable: true,
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          'Changed files (${pr.changedFiles.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final file in pr.changedFiles)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading:
+                                const Icon(Icons.description_outlined),
+                            title: Text(file.path),
+                            subtitle: Text(file.status),
+                            trailing: Text(
+                              '+${file.additions}  -${file.deletions}',
+                            ),
+                          ),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Comments (${pr.comments.length})',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: _acting ? null : _comment,
+                              icon: const Icon(Icons.add_comment_outlined),
+                              label: const Text('Comment'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        for (final comment in pr.comments)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '@${comment.author}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  MarkdownBody(
+                                    data: comment.body,
+                                    selectable: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+    );
+  }
+}
+
+class _CommitsList extends StatelessWidget {
+  const _CommitsList({
+    required this.workspace,
+    required this.commits,
+    required this.onAgent,
+  });
+
+  final WorkspaceSelection workspace;
+  final List<GhCommit> commits;
+  final void Function(String contextText) onAgent;
+
+  @override
+  Widget build(BuildContext context) {
+    if (commits.isEmpty) {
+      return const Center(child: Text('No commits found'));
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 100),
+      itemCount: commits.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final commit = commits[index];
+        final shortSha =
+            commit.sha.length > 8 ? commit.sha.substring(0, 8) : commit.sha;
+
+        return ListTile(
+          leading: const Icon(Icons.commit_rounded),
+          title: Text(
+            commit.message,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${commit.author.isEmpty ? 'unknown' : commit.author} • $shortSha',
+          ),
+          trailing: IconButton(
+            tooltip: 'Ask Gradient about this commit',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () => onAgent(
+              'Commit $shortSha in ${workspace.fullName} on '
+              '${workspace.branch}: ${commit.message}. '
+              'Inspect this commit and explain or review it.',
+            ),
+          ),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CommitDetailPage(
+                  workspace: workspace,
+                  sha: commit.sha,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class CommitDetailPage extends StatefulWidget {
+  const CommitDetailPage({
+    super.key,
+    required this.workspace,
+    required this.sha,
+  });
+
+  final WorkspaceSelection workspace;
+  final String sha;
+
+  @override
+  State<CommitDetailPage> createState() => _CommitDetailPageState();
+}
+
+class _CommitDetailPageState extends State<CommitDetailPage> {
+  final _settings = AppSettingsStore();
+  GhCommitDetail? _commit;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await _settings.githubToken();
+      final commit = await GhBackend(token: token).commitDetail(
+        widget.workspace.fullName,
+        widget.sha,
+      );
+      if (!mounted) return;
+      setState(() {
+        _commit = commit;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _askGradient() {
+    final commit = _commit;
+    final shortSha =
+        widget.sha.length > 8 ? widget.sha.substring(0, 8) : widget.sha;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => AgentSheet(
+        workspace: widget.workspace,
+        contextText: commit == null
+            ? 'Native commit $shortSha.'
+            : 'Native commit ${commit.sha}: ${commit.message}. '
+                'Author: ${commit.author}. '
+                '+${commit.additions}/-${commit.deletions}. '
+                'Changed files: ${commit.files.map((e) => e.path).join(', ')}.',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final commit = _commit;
+    final shortSha =
+        widget.sha.length > 8 ? widget.sha.substring(0, 8) : widget.sha;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Commit $shortSha'),
+        actions: [
+          IconButton(
+            tooltip: 'Ask Gradient',
+            onPressed: _askGradient,
+            icon: const Icon(Icons.auto_awesome_rounded),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _RepoError(message: _error!, onRetry: _load)
+              : commit == null
+                  ? const Center(child: Text('Commit unavailable'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 80),
+                      children: [
+                        SelectableText(
+                          commit.message,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Chip(
+                              avatar: const Icon(
+                                Icons.person_outline_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                commit.author.isEmpty
+                                    ? 'unknown'
+                                    : commit.author,
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                commit.sha.length > 12
+                                    ? commit.sha.substring(0, 12)
+                                    : commit.sha,
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                '+${commit.additions} / -${commit.deletions}',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Changed files (${commit.files.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final file in commit.files)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ExpansionTile(
+                              leading: const Icon(
+                                Icons.description_outlined,
+                              ),
+                              title: Text(file.path),
+                              subtitle: Text(
+                                '${file.status} • +${file.additions} / -${file.deletions}',
+                              ),
+                              childrenPadding:
+                                  const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                              children: [
+                                if (file.patch.isEmpty)
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'GitHub did not provide a text patch for this file.',
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    width: double.infinity,
+                                    constraints:
+                                        const BoxConstraints(maxHeight: 520),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: SingleChildScrollView(
+                                        child: SelectableText(
+                                          file.patch,
+                                          style: const TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontSize: 11.5,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
     );
   }
 }
@@ -688,6 +1788,7 @@ class WorkflowRunPage extends StatefulWidget {
 
 class _WorkflowRunPageState extends State<WorkflowRunPage> {
   bool _loading = true;
+  bool _acting = false;
   String? _error;
   List<GitHubWorkflowJob> _jobs = const [];
 
@@ -697,10 +1798,17 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
     _load();
   }
 
+  Future<GhBackend> _backend() async {
+    final token = await widget.settings.githubToken();
+    if (token.isEmpty) {
+      throw StateError('Connect GitHub before controlling workflows.');
+    }
+    return GhBackend(token: token);
+  }
+
   Future<void> _load() async {
     try {
-      final token = await widget.settings.githubToken();
-      final gh = GhBackend(token: token);
+      final gh = await _backend();
       final jobs = await gh.listWorkflowJobs(
         widget.workspace.fullName,
         widget.run.id,
@@ -709,6 +1817,7 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
       setState(() {
         _jobs = jobs;
         _loading = false;
+        _error = null;
       });
     } catch (error) {
       if (!mounted) return;
@@ -716,6 +1825,59 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
         _error = error.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _rerun({required bool failedOnly}) async {
+    if (_acting) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.rerunWorkflow(
+        widget.workspace.fullName,
+        widget.run.id,
+        failedOnly: failedOnly,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            failedOnly
+                ? 'Rerunning failed jobs.'
+                : 'Rerunning the workflow.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  Future<void> _cancel() async {
+    if (_acting) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.cancelWorkflow(
+        widget.workspace.fullName,
+        widget.run.id,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Workflow cancellation requested.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
     }
   }
 
@@ -788,6 +1950,9 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
 
   @override
   Widget build(BuildContext context) {
+    final completed = widget.run.status.toLowerCase() == 'completed';
+    final failed = widget.run.conclusion.toLowerCase() == 'failure';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.run.name),
@@ -803,29 +1968,79 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _RepoError(message: _error!, onRetry: _load)
-              : ListView.separated(
-                  itemCount: _jobs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final job = _jobs[index];
-                    return ListTile(
-                      leading: Icon(
-                        job.conclusion.toLowerCase() == 'failure'
-                            ? Icons.cancel_outlined
-                            : job.status.toLowerCase() == 'completed'
-                                ? Icons.check_circle_outline_rounded
-                                : Icons.pending_outlined,
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            if (completed)
+                              FilledButton.tonalIcon(
+                                onPressed: _acting
+                                    ? null
+                                    : () => _rerun(failedOnly: false),
+                                icon: const Icon(Icons.replay_rounded),
+                                label: const Text('Rerun'),
+                              ),
+                            if (completed && failed) ...[
+                              const SizedBox(width: 8),
+                              FilledButton.tonalIcon(
+                                onPressed: _acting
+                                    ? null
+                                    : () => _rerun(failedOnly: true),
+                                icon:
+                                    const Icon(Icons.restart_alt_rounded),
+                                label: const Text('Rerun failed'),
+                              ),
+                            ],
+                            if (!completed)
+                              FilledButton.tonalIcon(
+                                onPressed: _acting ? null : _cancel,
+                                icon: const Icon(Icons.stop_circle_outlined),
+                                label: const Text('Cancel run'),
+                              ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: _acting ? null : _load,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Refresh jobs'),
+                            ),
+                          ],
+                        ),
                       ),
-                      title: Text(job.name),
-                      subtitle: Text(
-                        job.conclusion.isEmpty
-                            ? job.status
-                            : job.conclusion,
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _jobs.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final job = _jobs[index];
+                          return ListTile(
+                            leading: Icon(
+                              job.conclusion.toLowerCase() == 'failure'
+                                  ? Icons.cancel_outlined
+                                  : job.status.toLowerCase() == 'completed'
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.pending_outlined,
+                            ),
+                            title: Text(job.name),
+                            subtitle: Text(
+                              job.conclusion.isEmpty
+                                  ? job.status
+                                  : job.conclusion,
+                            ),
+                            trailing:
+                                const Icon(Icons.article_outlined),
+                            onTap: () => _openLog(job),
+                          );
+                        },
                       ),
-                      trailing: const Icon(Icons.article_outlined),
-                      onTap: () => _openLog(job),
-                    );
-                  },
+                    ),
+                  ],
                 ),
     );
   }

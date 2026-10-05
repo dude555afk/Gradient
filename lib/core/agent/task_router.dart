@@ -20,9 +20,12 @@ class TaskRouter {
   final ModelRouter modelRouter;
   final SkillRouter skillRouter;
 
-  TaskRoute route(String task) {
+  TaskRoute route(
+    String task, {
+    bool hasImages = false,
+  }) {
     return TaskRoute(
-      model: modelRouter.select(task),
+      model: hasImages ? ModelRole.vision : modelRouter.select(task),
       skills: skillRouter.select(task),
     );
   }

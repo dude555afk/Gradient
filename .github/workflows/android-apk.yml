@@ -2,11 +2,15 @@ name: Build Android APK
 
 on:
   push:
-    branches: ["bootstrap/**"]
+    branches: [main, "bootstrap/**"]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  GRADIENT_APPLICATION_ID: com.dude555afk.gradient
+  GRADIENT_SIGNING_SHA256: 26:AB:CC:AC:47:CE:61:2B:24:6A:B1:4E:E7:0E:CE:3F:5D:02:12:00:3E:69:4E:90:21:31:E9:89:A3:4E:74:9B
 
 jobs:
   build-apk:
@@ -50,14 +54,44 @@ jobs:
         run: |
           set -euo pipefail
 
-          printf '%s' "$GRADIENT_KEYSTORE_BASE64" | base64 --decode \
-            > android/app/gradient-release.jks
+          python3 - <<'PY'
+          import base64
+          import os
+          import re
+          from pathlib import Path
+
+          raw = os.environ["GRADIENT_KEYSTORE_BASE64"]
+          candidates = re.findall(r"[A-Za-z0-9+/=]{500,}", raw)
+          if not candidates:
+              raise SystemExit("Could not find a base64 keystore payload in GRADIENT_KEYSTORE_BASE64")
+
+          payload = max(candidates, key=len)
+          try:
+              data = base64.b64decode(payload, validate=True)
+          except Exception as exc:
+              raise SystemExit(f"Invalid keystore base64 payload: {exc}")
+
+          out = Path("android/app/gradient-release.jks")
+          out.write_bytes(data)
+          if out.stat().st_size < 1000:
+              raise SystemExit("Decoded keystore is unexpectedly small")
+          PY
+
           test -s android/app/gradient-release.jks
 
-          keytool -list \
-            -keystore android/app/gradient-release.jks \
-            -storepass "$GRADIENT_KEYSTORE_PASSWORD" \
-            -alias gradient >/dev/null
+          ACTUAL_CERT="$(
+            keytool -list -v \
+              -keystore android/app/gradient-release.jks \
+              -storepass "$GRADIENT_KEYSTORE_PASSWORD" \
+              -alias gradient \
+            | sed -n 's/^[[:space:]]*SHA256: //p' \
+            | head -n 1
+          )"
+
+          if [ "$ACTUAL_CERT" != "$GRADIENT_SIGNING_SHA256" ]; then
+            echo "::error::Signing key mismatch. Expected $GRADIENT_SIGNING_SHA256 but got $ACTUAL_CERT"
+            exit 1
+          fi
 
           python3 - <<'PY'
           from pathlib import Path
@@ -72,7 +106,6 @@ jobs:
           """
           if 'android.permission.INTERNET' not in text:
               text = text.replace(marker, marker + permissions)
-
           manifest.write_text(text)
 
           gradle = Path("android/app/build.gradle.kts")
@@ -110,7 +143,6 @@ jobs:
               'signingConfig = signingConfigs.getByName("debug")',
               'signingConfig = signingConfigs.getByName("release")',
           )
-
           gradle.write_text(gradle_text)
 
           activity = Path(
@@ -131,9 +163,7 @@ jobs:
                       "gradient/native"
                   ).setMethodCallHandler { call, result ->
                       when (call.method) {
-                          "nativeLibraryDir" -> {
-                              result.success(applicationInfo.nativeLibraryDir)
-                          }
+                          "nativeLibraryDir" -> result.success(applicationInfo.nativeLibraryDir)
                           else -> result.notImplemented()
                       }
                   }
@@ -179,10 +209,18 @@ jobs:
             -o "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so" \
             ./cmd/gh
 
-          file "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so"
-
       - name: Resolve dependencies
         run: flutter pub get
+
+      - name: Compute update version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.3.$GITHUB_RUN_NUMBER"
+          echo "GRADIENT_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "GRADIENT_VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "Gradient update build: $VERSION_NAME ($VERSION_CODE)"
 
       - name: Build signed release APK
         env:
@@ -191,21 +229,97 @@ jobs:
           flutter build apk \
             --release \
             --target-platform android-arm64 \
-            --build-name 0.3.0 \
-            --build-number "$GITHUB_RUN_NUMBER"
+            --build-name "$GRADIENT_VERSION_NAME" \
+            --build-number "$GRADIENT_VERSION_CODE"
 
-      - name: Verify APK signature
+      - name: Verify update compatibility
         shell: bash
         run: |
           set -euo pipefail
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
           APKSIGNER="$(find "$SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          AAPT="$(find "$SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$APKSIGNER"
+          test -x "$AAPT"
 
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk dist/Gradient-release.apk
+
           "$APKSIGNER" verify --verbose --print-certs dist/Gradient-release.apk \
             | tee dist/signing-certificate.txt
+
+          APK_CERT="$(
+            "$APKSIGNER" verify --print-certs dist/Gradient-release.apk \
+              | sed -n 's/^.*certificate SHA-256 digest: //p' \
+              | head -n 1 \
+              | tr '[:lower:]' '[:upper:]' \
+              | sed 's/../&:/g;s/:$//'
+          )"
+
+          if [ "$APK_CERT" != "$GRADIENT_SIGNING_SHA256" ]; then
+            echo "::error::Built APK certificate drifted. Expected $GRADIENT_SIGNING_SHA256 but got $APK_CERT"
+            exit 1
+          fi
+
+          BADGING="$("$AAPT" dump badging dist/Gradient-release.apk | head -n 1)"
+          echo "$BADGING"
+
+          case "$BADGING" in
+            *"name='$GRADIENT_APPLICATION_ID'"*) ;;
+            *)
+              echo "::error::Wrong application id. Expected $GRADIENT_APPLICATION_ID"
+              exit 1
+              ;;
+          esac
+
+          case "$BADGING" in
+            *"versionCode='$GRADIENT_VERSION_CODE'"*) ;;
+            *)
+              echo "::error::Wrong versionCode. Expected $GRADIENT_VERSION_CODE"
+              exit 1
+              ;;
+          esac
+
+          cat > dist/update.json <<EOF
+          {
+            "applicationId": "$GRADIENT_APPLICATION_ID",
+            "versionName": "$GRADIENT_VERSION_NAME",
+            "versionCode": $GRADIENT_VERSION_CODE,
+            "signingCertificateSha256": "$GRADIENT_SIGNING_SHA256",
+            "apkUrl": "https://github.com/$GITHUB_REPOSITORY/releases/download/gradient-latest/Gradient-release.apk",
+            "releaseUrl": "https://github.com/$GITHUB_REPOSITORY/releases/tag/gradient-latest",
+            "commit": "$GITHUB_SHA",
+            "workflowRun": $GITHUB_RUN_NUMBER
+          }
+          EOF
+
+      - name: Publish rolling Gradient update
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git tag -f gradient-latest "$GITHUB_SHA"
+          git push origin refs/tags/gradient-latest --force
+
+          if gh release view gradient-latest >/dev/null 2>&1; then
+            gh release edit gradient-latest \
+              --title "Gradient latest" \
+              --notes "Rolling signed Android build • $GRADIENT_VERSION_NAME ($GRADIENT_VERSION_CODE)\nCommit: $GITHUB_SHA"
+          else
+            gh release create gradient-latest \
+              --title "Gradient latest" \
+              --notes "Rolling signed Android build • $GRADIENT_VERSION_NAME ($GRADIENT_VERSION_CODE)\nCommit: $GITHUB_SHA" \
+              --prerelease
+          fi
+
+          gh release upload gradient-latest \
+            dist/Gradient-release.apk \
+            dist/update.json \
+            dist/signing-certificate.txt \
+            --clobber
 
       - uses: actions/upload-artifact@v4
         with:
@@ -213,5 +327,6 @@ jobs:
           path: |
             dist/Gradient-release.apk
             dist/signing-certificate.txt
+            dist/update.json
           if-no-files-found: error
           retention-days: 14

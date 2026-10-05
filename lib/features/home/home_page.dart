@@ -21,6 +21,7 @@ class _HomePageState extends State<HomePage> {
 
   GhViewer? _viewer;
   List<GhRepository> _repos = const [];
+  List<GhNotification> _notifications = const [];
   WorkspaceSelection? _lastWorkspace;
   String _ghVersion = '';
   String? _error;
@@ -65,11 +66,20 @@ class _HomePageState extends State<HomePage> {
         gh.listRepositories(),
       ]);
 
+      List<GhNotification> notifications = const [];
+      try {
+        notifications = await gh.listNotifications();
+      } catch (_) {
+        // A token can lack notification scope. The rest of Gradient should
+        // still work normally in that case.
+      }
+
       if (!mounted) return;
       setState(() {
         _ghVersion = results[0] as String;
         _viewer = results[1] as GhViewer;
         _repos = results[2] as List<GhRepository>;
+        _notifications = notifications;
         _lastWorkspace = workspace;
         _loading = false;
       });
@@ -110,6 +120,55 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _openNotification(GhNotification notification) async {
+    final match = RegExp(r'/(issues|pulls)/(\d+)$')
+        .firstMatch(notification.subjectUrl);
+    final number =
+        match == null ? null : int.tryParse(match.group(2) ?? '');
+
+    if (number == null || notification.repository.isEmpty) return;
+
+    if (notification.unread) {
+      try {
+        final token = await _settings.githubToken();
+        await GhBackend(token: token).markNotificationRead(notification.id);
+      } catch (_) {
+        // Opening the item still matters more than failing a read receipt.
+      }
+    }
+
+    final workspace = WorkspaceSelection(
+      fullName: notification.repository,
+      defaultBranch: notification.defaultBranch,
+      branch: notification.defaultBranch,
+    );
+
+    if (!mounted) return;
+    if (notification.type == 'Issue') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => IssueDetailPage(
+            workspace: workspace,
+            number: number,
+          ),
+        ),
+      );
+    } else if (notification.type == 'PullRequest') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PullRequestDetailPage(
+            workspace: workspace,
+            number: number,
+          ),
+        ),
+      );
+    }
+
+    if (mounted && notification.unread) {
+      await _load();
+    }
+  }
+
   void _openAgent() {
     final workspace = _lastWorkspace;
     if (workspace == null) {
@@ -127,11 +186,8 @@ class _HomePageState extends State<HomePage> {
       showDragHandle: true,
       builder: (_) => AgentSheet(
         workspace: workspace,
-        contextText: 'Gradient native GitHub home. Last active repository: ' +
-            workspace.fullName +
-            ', branch: ' +
-            workspace.branch +
-            '.',
+        contextText: 'Gradient native GitHub home. Last active repository: '
+            '${workspace.fullName}, branch: ${workspace.branch}.',
       ),
     );
   }
@@ -147,6 +203,8 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final visibleRepos = _filteredRepos();
+    final unreadCount =
+        _notifications.where((notification) => notification.unread).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -178,19 +236,27 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (index) {
-          setState(() => _tab = index);
-        },
-        destinations: const [
-          NavigationDestination(
+        onDestinationSelected: (index) => setState(() => _tab = index),
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.folder_outlined),
             selectedIcon: Icon(Icons.folder_rounded),
             label: 'Repositories',
+          ),
+          NavigationDestination(
+            icon: unreadCount == 0
+                ? const Icon(Icons.inbox_outlined)
+                : Badge.count(
+                    count: unreadCount,
+                    child: const Icon(Icons.inbox_outlined),
+                  ),
+            selectedIcon: const Icon(Icons.inbox_rounded),
+            label: 'Inbox',
           ),
         ],
       ),
@@ -202,19 +268,26 @@ class _HomePageState extends State<HomePage> {
                   onSettings: _openSettings,
                   onRetry: _load,
                 )
-              : _tab == 0
-                  ? _HomeFeed(
+              : switch (_tab) {
+                  0 => _HomeFeed(
                       viewer: _viewer!,
                       ghVersion: _ghVersion,
                       repos: _repos.take(8).toList(growable: false),
                       lastWorkspace: _lastWorkspace,
                       onRepo: _openRepo,
-                    )
-                  : _ReposView(
+                      onRefresh: _load,
+                    ),
+                  1 => _ReposView(
                       search: _search,
                       repos: visibleRepos,
                       onRepo: _openRepo,
                     ),
+                  _ => _InboxView(
+                      notifications: _notifications,
+                      onNotification: _openNotification,
+                      onRefresh: _load,
+                    ),
+                },
     );
   }
 
@@ -293,6 +366,7 @@ class _HomeFeed extends StatelessWidget {
     required this.repos,
     required this.lastWorkspace,
     required this.onRepo,
+    required this.onRefresh,
   });
 
   final GhViewer viewer;
@@ -300,13 +374,14 @@ class _HomeFeed extends StatelessWidget {
   final List<GhRepository> repos;
   final WorkspaceSelection? lastWorkspace;
   final Future<void> Function(GhRepository repo) onRepo;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
     return RefreshIndicator(
-      onRefresh: () async {},
+      onRefresh: onRefresh,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
         children: [
@@ -333,7 +408,7 @@ class _HomeFeed extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Text('@' + viewer.login),
+                    Text('@${viewer.login}'),
                   ],
                 ),
               ),
@@ -355,9 +430,9 @@ class _HomeFeed extends StatelessWidget {
             Card(
               child: ListTile(
                 leading: const Icon(Icons.history_rounded),
-                title: const Text('Continue'),
+                title: const Text('Last workspace'),
                 subtitle: Text(
-                  lastWorkspace!.fullName + ' • ' + lastWorkspace!.branch,
+                  '${lastWorkspace!.fullName} • ${lastWorkspace!.branch}',
                 ),
               ),
             ),
@@ -448,6 +523,79 @@ class _ReposView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _InboxView extends StatelessWidget {
+  const _InboxView({
+    required this.notifications,
+    required this.onNotification,
+    required this.onRefresh,
+  });
+
+  final List<GhNotification> notifications;
+  final Future<void> Function(GhNotification notification) onNotification;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    if (notifications.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          children: const [
+            SizedBox(height: 150),
+            Icon(Icons.inbox_outlined, size: 48),
+            SizedBox(height: 12),
+            Text(
+              'Inbox zero. Suspiciously peaceful.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView.separated(
+        padding: const EdgeInsets.only(bottom: 110),
+        itemCount: notifications.length,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final notification = notifications[index];
+          final supported = notification.type == 'Issue' ||
+              notification.type == 'PullRequest';
+
+          return ListTile(
+            leading: Icon(
+              notification.type == 'PullRequest'
+                  ? Icons.merge_rounded
+                  : notification.type == 'Issue'
+                      ? Icons.adjust_rounded
+                      : Icons.notifications_outlined,
+            ),
+            title: Text(
+              notification.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${notification.repository} • ${notification.reason}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: notification.unread
+                ? const Icon(Icons.circle, size: 10)
+                : supported
+                    ? const Icon(Icons.chevron_right_rounded)
+                    : null,
+            onTap:
+                supported ? () => onNotification(notification) : null,
+          );
+        },
+      ),
     );
   }
 }
