@@ -32,6 +32,7 @@ class AgentService {
     required String prompt,
     required List<AgentMessage> history,
     List<String> imageDataUris = const [],
+    ModelRole? roleOverride,
     void Function(String delta)? onTextDelta,
     void Function(AgentProgressEvent event)? onProgress,
   }) async {
@@ -39,11 +40,12 @@ class AgentService {
       prompt,
       hasImages: imageDataUris.isNotEmpty,
     );
+    final selectedRole = roleOverride ?? route.model;
     final health = ModelHealthRegistry.instance;
-    final configuredCandidates = settings.modelCandidates(route.model);
+    final configuredCandidates = settings.modelCandidates(selectedRole);
     final candidates = health.healthyFirst(configuredCandidates);
     if (candidates.isEmpty) {
-      throw StateError('No model configured for ${route.model.label}.');
+      throw StateError('No model configured for ${selectedRole.label}.');
     }
     var activeModel = candidates.first;
 
@@ -101,7 +103,7 @@ class AgentService {
       for (var round = 0; round < 14; round++) {
         onProgress?.call(
           AgentProgressEvent(
-            label: round == 0 ? route.model.label : 'Continuing',
+            label: round == 0 ? selectedRole.label : 'Continuing',
             detail: activeModel,
             kind: 'model',
           ),
@@ -124,7 +126,7 @@ class AgentService {
                 model: candidate,
                 messages: messages,
                 tools: tools,
-                reasoningEffort: settings.reasoningEffortFor(route.model),
+                reasoningEffort: settings.reasoningEffortFor(selectedRole),
                 onDelta: (delta) {
                   if (delta.isNotEmpty) emittedText = true;
                   onTextDelta?.call(delta);
