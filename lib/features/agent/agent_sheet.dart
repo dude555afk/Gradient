@@ -1078,37 +1078,43 @@ class _AgentSheetState extends State<AgentSheet> {
               : Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 2, 4, 4),
+                      padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
                       child: Row(
                         children: [
-                          const Icon(Icons.auto_awesome_rounded),
-                          const SizedBox(width: 8),
                           Expanded(
                             child: InkWell(
                               onTap: _renameConversation,
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                               child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                  vertical: 6,
+                                ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      _conversation?.title ?? 'Gradient',
+                                      _conversation?.title ?? 'New chat',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
+                                        fontSize: 18,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
+                                    const SizedBox(height: 1),
                                     Text(
                                       _taskBranch?.isNotEmpty == true
-                                          ? '${widget.workspace.fullName} • $_taskBranch'
+                                          ? '${widget.workspace.fullName} · $_taskBranch'
                                           : widget.workspace.fullName,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style:
-                                          Theme.of(context).textTheme.labelSmall,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -1120,23 +1126,29 @@ class _AgentSheetState extends State<AgentSheet> {
                             onPressed: _busy ? null : _showHistory,
                             icon: const Icon(Icons.history_rounded),
                           ),
-                          IconButton(
-                            tooltip: 'New chat',
-                            onPressed: _busy ? null : _newConversation,
-                            icon: const Icon(Icons.add_comment_outlined),
-                          ),
                           PopupMenuButton<String>(
-                            tooltip: 'Checkpoints',
-                            icon: const Icon(Icons.bookmarks_outlined),
+                            tooltip: 'Chat menu',
+                            icon: const Icon(Icons.more_horiz_rounded),
                             enabled: !_busy && !_applying,
                             onSelected: (value) {
-                              if (value == 'save') {
+                              if (value == 'new') {
+                                _newConversation();
+                              } else if (value == 'save') {
                                 _createCheckpoint();
                               } else if (value == 'restore') {
                                 _showCheckpoints();
                               }
                             },
                             itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'new',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.add_comment_outlined),
+                                  title: Text('New chat'),
+                                ),
+                              ),
                               PopupMenuItem(
                                 value: 'save',
                                 child: ListTile(
@@ -1158,6 +1170,7 @@ class _AgentSheetState extends State<AgentSheet> {
                             ],
                           ),
                           IconButton(
+                            tooltip: 'Close',
                             onPressed: () => Navigator.pop(context),
                             icon: const Icon(Icons.close_rounded),
                           ),
