@@ -285,7 +285,7 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _effort[role] ?? '',
+                    initialValue: _effort[role] ?? '',
                     decoration: const InputDecoration(
                       labelText: 'Reasoning effort',
                     ),
