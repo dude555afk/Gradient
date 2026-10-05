@@ -328,6 +328,9 @@ jobs:
           """)
           PY
 
+      - name: Add background agent runtime
+        run: python3 tooling/android/patch_runtime.py
+
       - name: Fetch GitHub CLI source
         run: |
           git clone --depth 1 --branch v2.102.0 \
