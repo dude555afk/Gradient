@@ -4,6 +4,63 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_models.dart';
 
+class AgentCheckpoint {
+  const AgentCheckpoint({
+    required this.id,
+    required this.label,
+    required this.messages,
+    required this.changes,
+    required this.pullRequests,
+    required this.taskBranch,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String label;
+  final List<AgentMessage> messages;
+  final List<PendingFileChange> changes;
+  final List<PendingPullRequest> pullRequests;
+  final String? taskBranch;
+  final DateTime createdAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'label': label,
+        'messages': messages.map((e) => e.toJson()).toList(),
+        'changes': changes.map((e) => e.toJson()).toList(),
+        'pullRequests': pullRequests.map((e) => e.toJson()).toList(),
+        'taskBranch': taskBranch,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory AgentCheckpoint.fromJson(Map<String, dynamic> json) {
+    return AgentCheckpoint(
+      id: json['id']?.toString() ?? '',
+      label: json['label']?.toString() ?? 'Checkpoint',
+      messages: (json['messages'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((e) => AgentMessage.fromJson(Map<String, dynamic>.from(e)))
+          .toList(growable: false),
+      changes: (json['changes'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (e) => PendingFileChange.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(growable: false),
+      pullRequests: (json['pullRequests'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (e) => PendingPullRequest.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(growable: false),
+      taskBranch: json['taskBranch']?.toString(),
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+              DateTime.now(),
+    );
+  }
+}
+
 class AgentConversation {
   const AgentConversation({
     required this.id,
@@ -12,6 +69,7 @@ class AgentConversation {
     required this.messages,
     required this.changes,
     required this.pullRequests,
+    required this.checkpoints,
     required this.taskBranch,
     required this.createdAt,
     required this.updatedAt,
@@ -23,6 +81,7 @@ class AgentConversation {
   final List<AgentMessage> messages;
   final List<PendingFileChange> changes;
   final List<PendingPullRequest> pullRequests;
+  final List<AgentCheckpoint> checkpoints;
   final String? taskBranch;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -32,6 +91,7 @@ class AgentConversation {
     List<AgentMessage>? messages,
     List<PendingFileChange>? changes,
     List<PendingPullRequest>? pullRequests,
+    List<AgentCheckpoint>? checkpoints,
     String? taskBranch,
     bool clearTaskBranch = false,
     DateTime? updatedAt,
@@ -43,6 +103,7 @@ class AgentConversation {
       messages: messages ?? this.messages,
       changes: changes ?? this.changes,
       pullRequests: pullRequests ?? this.pullRequests,
+      checkpoints: checkpoints ?? this.checkpoints,
       taskBranch: clearTaskBranch ? null : taskBranch ?? this.taskBranch,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
@@ -56,6 +117,7 @@ class AgentConversation {
         'messages': messages.map((e) => e.toJson()).toList(),
         'changes': changes.map((e) => e.toJson()).toList(),
         'pullRequests': pullRequests.map((e) => e.toJson()).toList(),
+        'checkpoints': checkpoints.map((e) => e.toJson()).toList(),
         'taskBranch': taskBranch,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
@@ -83,6 +145,12 @@ class AgentConversation {
           .whereType<Map>()
           .map(
             (e) => PendingPullRequest.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList(growable: false),
+      checkpoints: (json['checkpoints'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map(
+            (e) => AgentCheckpoint.fromJson(Map<String, dynamic>.from(e)),
           )
           .toList(growable: false),
       taskBranch: json['taskBranch']?.toString(),
@@ -118,6 +186,7 @@ class AgentSessionStore {
       messages: List<AgentMessage>.from(seedMessages),
       changes: const [],
       pullRequests: const [],
+      checkpoints: const [],
       taskBranch: null,
       createdAt: now,
       updatedAt: now,
@@ -199,7 +268,9 @@ class AgentSessionStore {
     return create(
       source.repoFullName,
       seedMessages: source.messages.take(count).toList(growable: false),
-      title: source.title == 'New chat' ? 'Branched chat' : '${source.title} branch',
+      title: source.title == 'New chat'
+          ? 'Branched chat'
+          : '${source.title} branch',
     );
   }
 
