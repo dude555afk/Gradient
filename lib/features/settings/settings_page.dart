@@ -4,7 +4,6 @@ import '../../core/ai/provider_model_catalog.dart';
 import '../../core/gh/gh_auth_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/update/update_service.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -36,6 +35,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _githubConnected = false;
   String? _deviceCode;
   bool _checkingUpdate = false;
+  bool _downloadingUpdate = false;
+  double? _downloadProgress;
   GradientUpdateStatus? _updateStatus;
 
   @override
@@ -262,20 +263,50 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _downloadUpdate() async {
     final info = _updateStatus?.latest;
-    if (info == null || info.apkUrl.isEmpty) return;
+    if (info == null || info.apkUrl.isEmpty || _downloadingUpdate) return;
 
-    final uri = Uri.tryParse(info.apkUrl);
-    if (uri == null) return;
+    setState(() {
+      _downloadingUpdate = true;
+      _downloadProgress = 0;
+    });
+    final service = GradientUpdateService();
 
-    final opened = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the update download.')),
+    try {
+      final result = await service.downloadAndInstall(
+        info,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          setState(() {
+            _downloadProgress = total == null || total <= 0
+                ? null
+                : (received / total).clamp(0.0, 1.0);
+          });
+        },
       );
+
+      if (!mounted) return;
+      if (result == 'permission_requested') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Allow Gradient to install updates once. The Android installer will open when you return.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      service.dispose();
+      if (mounted) {
+        setState(() {
+          _downloadingUpdate = false;
+          _downloadProgress = null;
+        });
+      }
     }
   }
 
