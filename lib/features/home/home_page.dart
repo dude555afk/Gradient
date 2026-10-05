@@ -126,14 +126,17 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openNotification(GhNotification notification) async {
-    if (notification.repository.isEmpty) return;
+    final match = RegExp(r'/(issues|pulls)/(\d+)$')
+        .firstMatch(notification.subjectUrl);
+    final number =
+        match == null ? null : int.tryParse(match.group(2) ?? '');
 
     if (notification.unread) {
       try {
         final token = await _settings.githubToken();
         await GhBackend(token: token).markNotificationRead(notification.id);
       } catch (_) {
-        // Opening the notification is more useful than failing on read state.
+        // Opening the item still matters more than failing a read receipt.
       }
     }
 
@@ -143,14 +146,11 @@ class _HomePageState extends State<HomePage> {
       branch: notification.defaultBranch,
     );
 
-    final match = RegExp(r'/(issues|pulls)/(\d+)$')
-        .firstMatch(notification.subjectUrl);
-    final number =
-        match == null ? null : int.tryParse(match.group(2) ?? '');
-
     if (!mounted) return;
 
-    if (notification.type == 'Issue' && number != null) {
+    if (notification.type == 'Issue' &&
+        number != null &&
+        notification.repository.isNotEmpty) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => IssueDetailPage(
@@ -159,7 +159,9 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       );
-    } else if (notification.type == 'PullRequest' && number != null) {
+    } else if (notification.type == 'PullRequest' &&
+        number != null &&
+        notification.repository.isNotEmpty) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => PullRequestDetailPage(
@@ -168,12 +170,11 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       );
-    } else {
+    } else if (notification.repository.isNotEmpty) {
+      final fallback = _notificationWebUrl(notification);
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => GitHubWorkspacePage(
-            initialUrl: _notificationWebUrl(notification),
-          ),
+          builder: (_) => GitHubWorkspacePage(initialUrl: fallback),
         ),
       );
     }
@@ -185,22 +186,27 @@ class _HomePageState extends State<HomePage> {
 
   String _notificationWebUrl(GhNotification notification) {
     final repoUrl = 'https://github.com/${notification.repository}';
-    final uri = Uri.tryParse(notification.subjectUrl);
-    if (uri == null || uri.host != 'api.github.com') return repoUrl;
+    final api = notification.subjectUrl;
+    if (api.isEmpty) return repoUrl;
 
-    final prefix = '/repos/${notification.repository}';
-    if (!uri.path.startsWith(prefix)) return repoUrl;
+    final commit = RegExp(r'/commits/([0-9a-fA-F]+)$').firstMatch(api);
+    if (commit != null) {
+      return '$repoUrl/commit/${commit.group(1)}';
+    }
 
-    final rest = uri.path.substring(prefix.length);
-    if (rest.startsWith('/issues/')) return repoUrl + rest;
-    if (rest.startsWith('/pulls/')) {
-      return repoUrl + rest.replaceFirst('/pulls/', '/pull/');
+    final release = RegExp(r'/releases/\d+$').hasMatch(api);
+    if (release || notification.type == 'Release') {
+      return '$repoUrl/releases';
     }
-    if (rest.startsWith('/commits/')) {
-      return repoUrl + rest.replaceFirst('/commits/', '/commit/');
+
+    if (notification.type == 'Discussion') {
+      return '$repoUrl/discussions';
     }
-    if (rest.startsWith('/discussions/')) return repoUrl + rest;
-    if (rest.startsWith('/releases/')) return '$repoUrl/releases';
+
+    if (notification.type == 'CheckSuite' ||
+        notification.type == 'WorkflowRun') {
+      return '$repoUrl/actions';
+    }
 
     return repoUrl;
   }
