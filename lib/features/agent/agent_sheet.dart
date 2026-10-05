@@ -12,6 +12,7 @@ import '../../core/agent/agent_session_store.dart';
 import '../../core/ai/openai_compatible_provider.dart';
 import '../../core/diff/simple_diff.dart';
 import '../../core/gh/gh_backend.dart';
+import '../../core/models/model_router.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/workspace/workspace_store.dart';
 import '../../shared/gradient_markdown.dart';
@@ -53,6 +54,7 @@ class _AgentSheetState extends State<AgentSheet> {
   bool _busy = false;
   bool _applying = false;
   bool _webEnabled = true;
+  ModelRole? _roleOverride;
   bool _loadingSession = true;
 
   @override
@@ -792,6 +794,7 @@ class _AgentSheetState extends State<AgentSheet> {
         prompt: prompt,
         history: history,
         imageDataUris: imageDataUris,
+        roleOverride: _roleOverride,
         onTextDelta: (delta) {
           if (!mounted || delta.isEmpty) return;
           _streamingText += delta;
@@ -1401,6 +1404,9 @@ class _AgentSheetState extends State<AgentSheet> {
                       webEnabled: _webEnabled,
                       onWebChanged: (value) =>
                           setState(() => _webEnabled = value),
+                      selectedRole: _roleOverride,
+                      onRoleChanged: (role) =>
+                          setState(() => _roleOverride = role),
                       onAttach: _pickImages,
                       onSend: () => _send(),
                       maxLines: keyboard > 0 ? 3 : 5,
