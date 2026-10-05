@@ -1048,28 +1048,52 @@ class _AgentSheetState extends State<AgentSheet> {
                                 ),
                               ),
                             ),
-                          if (_busy && _streamingText.isNotEmpty)
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Container(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 640),
-                                margin:
-                                    const EdgeInsets.symmetric(vertical: 5),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 11,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: cs.surfaceContainerHigh,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: MarkdownBody(
-                                  data: _streamingText,
-                                  selectable: true,
-                                  shrinkWrap: true,
-                                ),
-                              ),
+                          if (_busy)
+                            ValueListenableBuilder<String>(
+                              valueListenable: _streamingNotifier,
+                              builder: (context, text, _) {
+                                if (text.isEmpty) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Row(
+                                      children: [
+                                        SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text('Gradient is working…'),
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                return Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 640),
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 5,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 11,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerHigh,
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: MarkdownBody(
+                                      data: text,
+                                      selectable: true,
+                                      shrinkWrap: true,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           if (_changes.length > 1)
                             Card(
@@ -1199,20 +1223,7 @@ class _AgentSheetState extends State<AgentSheet> {
                                 ),
                               ),
                             ),
-                          if (_busy && _streamingText.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text('Gradient is working…'),
-                                ],
+                        ],
                               ),
                             ),
                         ],
