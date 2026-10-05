@@ -25,7 +25,7 @@ class TaskRouter {
     bool hasImages = false,
   }) {
     return TaskRoute(
-      model: hasImages ? ModelRole.vision : modelRouter.select(task),
+      model: modelRouter.select(task, hasImages: hasImages),
       skills: skillRouter.select(task),
     );
   }
