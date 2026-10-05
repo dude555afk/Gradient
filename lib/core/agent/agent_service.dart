@@ -4,6 +4,7 @@ import '../ai/model_health_registry.dart';
 import '../ai/openai_compatible_provider.dart';
 import '../gh/gh_backend.dart';
 import '../gh/gh_command_runner.dart';
+import '../models/model_router.dart';
 import '../search/web_research_service.dart';
 import '../security/protected_path.dart';
 import '../settings/app_settings.dart';
