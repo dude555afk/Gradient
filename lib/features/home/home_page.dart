@@ -294,6 +294,8 @@ class _HomePageState extends State<HomePage> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(22),
           child: NavigationBar(
+        height: 62,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         selectedIndex: _tab,
         onDestinationSelected: (index) => setState(() => _tab = index),
         destinations: [
