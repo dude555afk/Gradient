@@ -57,6 +57,22 @@ class GhViewer {
   final String avatarUrl;
 }
 
+class GhCommit {
+  const GhCommit({
+    required this.sha,
+    required this.message,
+    required this.author,
+    required this.date,
+    required this.url,
+  });
+
+  final String sha;
+  final String message;
+  final String author;
+  final String date;
+  final String url;
+}
+
 class GhIssue {
   const GhIssue({
     required this.number,
@@ -277,6 +293,39 @@ class GhBackend {
         updatedAt: json['updatedAt'] as String? ?? '',
       );
     }).where((repo) => repo.fullName.isNotEmpty).toList(growable: false);
+  }
+
+  Future<List<GhCommit>> listCommits(
+    String fullName, {
+    required String ref,
+    int limit = 50,
+  }) async {
+    final result = await _runner.run([
+      'api',
+      'repos/$fullName/commits?sha=${Uri.encodeQueryComponent(ref)}&per_page=$limit',
+    ]);
+    final raw = jsonDecode(result.stdout) as List<dynamic>;
+
+    return raw.whereType<Map>().map((entry) {
+      final json = Map<String, dynamic>.from(entry);
+      final commit =
+          json['commit'] as Map<String, dynamic>? ?? const {};
+      final author =
+          commit['author'] as Map<String, dynamic>? ?? const {};
+      final githubAuthor =
+          json['author'] as Map<String, dynamic>? ?? const {};
+      final message = commit['message']?.toString() ?? '';
+
+      return GhCommit(
+        sha: json['sha']?.toString() ?? '',
+        message: message.split('\n').first,
+        author: githubAuthor['login']?.toString().isNotEmpty == true
+            ? githubAuthor['login'].toString()
+            : author['name']?.toString() ?? '',
+        date: author['date']?.toString() ?? '',
+        url: json['html_url']?.toString() ?? '',
+      );
+    }).where((e) => e.sha.isNotEmpty).toList(growable: false);
   }
 
   Future<List<String>> listBranches(String fullName) async {
