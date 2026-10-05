@@ -19,11 +19,18 @@ for permission in [
         )
 
 if 'android:name=".GradientApplication"' not in text:
-    text = text.replace(
-        "<application",
-        '<application android:name=".GradientApplication"',
-        1,
-    )
+    if 'android:name="${applicationName}"' in text:
+        text = text.replace(
+            'android:name="${applicationName}"',
+            'android:name=".GradientApplication"',
+            1,
+        )
+    else:
+        text = text.replace(
+            "<application",
+            '<application android:name=".GradientApplication"',
+            1,
+        )
 
 if "GenerationForegroundService" not in text:
     service = """
