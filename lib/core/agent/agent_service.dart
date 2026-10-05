@@ -30,10 +30,14 @@ class AgentService {
   Future<AgentResult> run({
     required String prompt,
     required List<AgentMessage> history,
+    List<String> imageDataUris = const [],
     void Function(String delta)? onTextDelta,
     void Function(AgentProgressEvent event)? onProgress,
   }) async {
-    final route = const TaskRouter().route(prompt);
+    final route = const TaskRouter().route(
+      prompt,
+      hasImages: imageDataUris.isNotEmpty,
+    );
     final model = settings.modelFor(route.model);
     if (model.isEmpty) {
       throw StateError('No model configured for ${route.model.label}.');
@@ -63,7 +67,22 @@ class AgentService {
       ...history.takeLast(16).map(
             (e) => {'role': e.role, 'content': e.content},
           ),
-      {'role': 'user', 'content': prompt},
+      {
+        'role': 'user',
+        'content': imageDataUris.isEmpty
+            ? prompt
+            : [
+                {
+                  'type': 'text',
+                  'text': prompt,
+                },
+                for (final dataUri in imageDataUris)
+                  {
+                    'type': 'image_url',
+                    'image_url': {'url': dataUri},
+                  },
+              ],
+      },
     ];
 
     final tools = _tools(
@@ -181,6 +200,8 @@ ${repo == null ? 'No repository API context is available for this page.' : 'Repo
 
 Current GitHub browser context:
 ${pageContext.trim().isEmpty ? 'No safe page excerpt is available.' : pageContext}
+
+${imageDataUris.isEmpty ? 'No image is attached to the current request.' : 'The current request includes ${imageDataUris.length} image attachment(s). Inspect them directly when relevant.'}
 
 Rules:
 - Treat the currently selected native GitHub repository and screen as the user's primary workspace.
