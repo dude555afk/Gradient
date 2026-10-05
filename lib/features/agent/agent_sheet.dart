@@ -1164,8 +1164,9 @@ class _AgentSheetState extends State<AgentSheet> {
                         ],
                       ),
                     ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
+                    if (_messages.isEmpty && !_busy)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Row(
                         children: [
@@ -1380,113 +1381,64 @@ class _AgentSheetState extends State<AgentSheet> {
                         ],
                       ),
                     ),
-                    const Divider(height: 1),
-                    Material(
-                      color: cs.surface,
-                      child: Padding(
-                        padding:
-                            const EdgeInsets.fromLTRB(10, 6, 10, 8),
-                        child: Column(
-                          children: [
-                            if (_pendingImages.isNotEmpty)
-                              SizedBox(
-                                height: 76,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _pendingImages.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 8),
-                                  itemBuilder: (context, index) {
-                                    final image = _pendingImages[index];
-                                    return Stack(
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          child: Image.memory(
-                                            image.bytes,
-                                            width: 72,
-                                            height: 72,
-                                            fit: BoxFit.cover,
+                    KelivoChatComposer(
+                      controller: _controller,
+                      enabled: !_busy && !_applying,
+                      busy: _busy,
+                      webEnabled: _webEnabled,
+                      onWebChanged: (value) =>
+                          setState(() => _webEnabled = value),
+                      onAttach: _pickImages,
+                      onSend: () => _send(),
+                      maxLines: keyboard > 0 ? 3 : 5,
+                      attachmentPreview: _pendingImages.isEmpty
+                          ? null
+                          : SizedBox(
+                              height: 76,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _pendingImages.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final image = _pendingImages[index];
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        child: Image.memory(
+                                          image.bytes,
+                                          width: 72,
+                                          height: 72,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: -6,
+                                        top: -6,
+                                        child: IconButton.filledTonal(
+                                          visualDensity:
+                                              VisualDensity.compact,
+                                          iconSize: 16,
+                                          tooltip: 'Remove image',
+                                          onPressed: () {
+                                            setState(
+                                              () => _pendingImages
+                                                  .removeAt(index),
+                                            );
+                                          },
+                                          icon: const Icon(
+                                            Icons.close_rounded,
                                           ),
                                         ),
-                                        Positioned(
-                                          right: -6,
-                                          top: -6,
-                                          child: IconButton.filledTonal(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            iconSize: 16,
-                                            tooltip: 'Remove image',
-                                            onPressed: () {
-                                              setState(
-                                                () => _pendingImages
-                                                    .removeAt(index),
-                                              );
-                                            },
-                                            icon: const Icon(
-                                              Icons.close_rounded,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ),
-                            TextField(
-                              controller: _controller,
-                              minLines: 1,
-                              maxLines: keyboard > 0 ? 3 : 5,
-                              enabled: !_busy && !_applying,
-                              textInputAction: TextInputAction.newline,
-                              decoration: const InputDecoration(
-                                hintText:
-                                    'Ask Gradient about this repo…',
-                                border: InputBorder.none,
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
-                            Row(
-                              children: [
-                                IconButton(
-                                  tooltip: 'Attach images',
-                                  onPressed:
-                                      _busy || _applying ? null : _pickImages,
-                                  icon:
-                                      const Icon(Icons.add_photo_alternate_outlined),
-                                ),
-                                FilterChip(
-                                  label: const Text('Web'),
-                                  selected: _webEnabled,
-                                  onSelected: _busy
-                                      ? null
-                                      : (value) => setState(
-                                            () => _webEnabled = value,
-                                          ),
-                                ),
-                                const Spacer(),
-                                IconButton.filled(
-                                  onPressed: _busy || _applying
-                                      ? null
-                                      : () => _send(),
-                                  icon: _busy
-                                      ? const SizedBox.square(
-                                          dimension: 18,
-                                          child:
-                                              CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.arrow_upward_rounded,
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ],
                 ),
