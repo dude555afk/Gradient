@@ -296,6 +296,92 @@ class GhBackend {
     return _stripTerminalSequences(result.stdout);
   }
 
+
+  Future<List<String>> repositoryMap(
+    String fullName, {
+    required String ref,
+    int maxEntries = 1600,
+  }) async {
+    final safeRef = Uri.encodeComponent(ref);
+    final result = await _runner.run([
+      'api',
+      'repos/$fullName/git/trees/$safeRef?recursive=1',
+    ]);
+    final json = jsonDecode(result.stdout) as Map<String, dynamic>;
+    final tree = json['tree'] as List<dynamic>? ?? const [];
+
+    final paths = <String>[];
+    for (final raw in tree) {
+      if (raw is! Map) continue;
+      final entry = Map<String, dynamic>.from(raw);
+      final path = entry['path']?.toString() ?? '';
+      final type = entry['type']?.toString() ?? '';
+      if (path.isEmpty) continue;
+      paths.add(type == 'tree' ? '$path/' : path);
+      if (paths.length >= maxEntries) break;
+    }
+    return paths;
+  }
+
+  Future<List<Map<String, dynamic>>> searchCode(
+    String fullName,
+    String query, {
+    int limit = 30,
+  }) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return const [];
+
+    final result = await _runner.run([
+      'api',
+      '--method',
+      'GET',
+      'search/code',
+      '-f',
+      'q=$normalized repo:$fullName',
+      '-f',
+      'per_page=$limit',
+    ]);
+
+    final json = jsonDecode(result.stdout) as Map<String, dynamic>;
+    final items = json['items'] as List<dynamic>? ?? const [];
+
+    return items.whereType<Map>().map((raw) {
+      final item = Map<String, dynamic>.from(raw);
+      final repository =
+          item['repository'] as Map<String, dynamic>? ?? const {};
+      return <String, dynamic>{
+        'path': item['path']?.toString() ?? '',
+        'url': item['html_url']?.toString() ?? '',
+        'repository': repository['full_name']?.toString() ?? fullName,
+      };
+    }).toList(growable: false);
+  }
+
+  Future<void> rerunWorkflow(
+    String fullName,
+    int runId, {
+    bool failedOnly = false,
+  }) async {
+    await _runner.run([
+      'run',
+      'rerun',
+      '$runId',
+      '--repo',
+      fullName,
+      if (failedOnly) '--failed',
+    ]);
+  }
+
+  Future<void> cancelWorkflow(String fullName, int runId) async {
+    await _runner.run([
+      'run',
+      'cancel',
+      '$runId',
+      '--repo',
+      fullName,
+    ]);
+  }
+
   Future<String> createBranch({
     required String fullName,
     required String branch,
