@@ -85,6 +85,91 @@ class GhFile {
   final String content;
 }
 
+
+class GhComment {
+  const GhComment({
+    required this.author,
+    required this.body,
+    required this.createdAt,
+  });
+
+  final String author;
+  final String body;
+  final String createdAt;
+}
+
+class GhIssueDetail {
+  const GhIssueDetail({
+    required this.number,
+    required this.title,
+    required this.state,
+    required this.body,
+    required this.author,
+    required this.labels,
+    required this.comments,
+    required this.url,
+  });
+
+  final int number;
+  final String title;
+  final String state;
+  final String body;
+  final String author;
+  final List<String> labels;
+  final List<GhComment> comments;
+  final String url;
+}
+
+class GhChangedFile {
+  const GhChangedFile({
+    required this.path,
+    required this.status,
+    required this.additions,
+    required this.deletions,
+  });
+
+  final String path;
+  final String status;
+  final int additions;
+  final int deletions;
+}
+
+class GhPullRequestDetail {
+  const GhPullRequestDetail({
+    required this.number,
+    required this.title,
+    required this.state,
+    required this.body,
+    required this.author,
+    required this.labels,
+    required this.comments,
+    required this.url,
+    required this.headRefName,
+    required this.baseRefName,
+    required this.additions,
+    required this.deletions,
+    required this.changedFiles,
+    required this.mergeable,
+    required this.isDraft,
+  });
+
+  final int number;
+  final String title;
+  final String state;
+  final String body;
+  final String author;
+  final List<String> labels;
+  final List<GhComment> comments;
+  final String url;
+  final String headRefName;
+  final String baseRefName;
+  final int additions;
+  final int deletions;
+  final List<GhChangedFile> changedFiles;
+  final String mergeable;
+  final bool isDraft;
+}
+
 class GhBackend {
   GhBackend({required String token}) : _runner = GhCommandRunner(token: token);
 
@@ -202,6 +287,50 @@ class GhBackend {
     }).toList(growable: false);
   }
 
+  Future<GhIssueDetail> issueDetail(
+    String fullName,
+    int number,
+  ) async {
+    final issueResult = await _runner.run([
+      'api',
+      'repos/$fullName/issues/$number',
+    ]);
+    final issue = jsonDecode(issueResult.stdout) as Map<String, dynamic>;
+
+    final commentsResult = await _runner.run([
+      'api',
+      'repos/$fullName/issues/$number/comments?per_page=100',
+    ]);
+    final commentsRaw = jsonDecode(commentsResult.stdout) as List<dynamic>;
+
+    final user = issue['user'] as Map<String, dynamic>? ?? const {};
+    final labelsRaw = issue['labels'] as List<dynamic>? ?? const [];
+
+    return GhIssueDetail(
+      number: (issue['number'] as num?)?.toInt() ?? number,
+      title: issue['title']?.toString() ?? '',
+      state: issue['state']?.toString() ?? '',
+      body: issue['body']?.toString() ?? '',
+      author: user['login']?.toString() ?? '',
+      labels: labelsRaw
+          .whereType<Map>()
+          .map((e) => e['name']?.toString() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList(growable: false),
+      comments: commentsRaw.whereType<Map>().map((raw) {
+        final comment = Map<String, dynamic>.from(raw);
+        final author =
+            comment['user'] as Map<String, dynamic>? ?? const {};
+        return GhComment(
+          author: author['login']?.toString() ?? '',
+          body: comment['body']?.toString() ?? '',
+          createdAt: comment['created_at']?.toString() ?? '',
+        );
+      }).toList(growable: false),
+      url: issue['html_url']?.toString() ?? '',
+    );
+  }
+
   Future<List<GhPullRequest>> listPullRequests(String fullName) async {
     final result = await _runner.run([
       'pr',
@@ -231,6 +360,73 @@ class GhBackend {
         url: json['url'] as String? ?? '',
       );
     }).toList(growable: false);
+  }
+
+  Future<GhPullRequestDetail> pullRequestDetail(
+    String fullName,
+    int number,
+  ) async {
+    final prResult = await _runner.run([
+      'api',
+      'repos/$fullName/pulls/$number',
+    ]);
+    final pr = jsonDecode(prResult.stdout) as Map<String, dynamic>;
+
+    final commentsResult = await _runner.run([
+      'api',
+      'repos/$fullName/issues/$number/comments?per_page=100',
+    ]);
+    final commentsRaw = jsonDecode(commentsResult.stdout) as List<dynamic>;
+
+    final filesResult = await _runner.run([
+      'api',
+      'repos/$fullName/pulls/$number/files?per_page=100',
+    ]);
+    final filesRaw = jsonDecode(filesResult.stdout) as List<dynamic>;
+
+    final user = pr['user'] as Map<String, dynamic>? ?? const {};
+    final head = pr['head'] as Map<String, dynamic>? ?? const {};
+    final base = pr['base'] as Map<String, dynamic>? ?? const {};
+    final labelsRaw = pr['labels'] as List<dynamic>? ?? const [];
+
+    return GhPullRequestDetail(
+      number: (pr['number'] as num?)?.toInt() ?? number,
+      title: pr['title']?.toString() ?? '',
+      state: pr['state']?.toString() ?? '',
+      body: pr['body']?.toString() ?? '',
+      author: user['login']?.toString() ?? '',
+      labels: labelsRaw
+          .whereType<Map>()
+          .map((e) => e['name']?.toString() ?? '')
+          .where((e) => e.isNotEmpty)
+          .toList(growable: false),
+      comments: commentsRaw.whereType<Map>().map((raw) {
+        final comment = Map<String, dynamic>.from(raw);
+        final author =
+            comment['user'] as Map<String, dynamic>? ?? const {};
+        return GhComment(
+          author: author['login']?.toString() ?? '',
+          body: comment['body']?.toString() ?? '',
+          createdAt: comment['created_at']?.toString() ?? '',
+        );
+      }).toList(growable: false),
+      url: pr['html_url']?.toString() ?? '',
+      headRefName: head['ref']?.toString() ?? '',
+      baseRefName: base['ref']?.toString() ?? '',
+      additions: (pr['additions'] as num?)?.toInt() ?? 0,
+      deletions: (pr['deletions'] as num?)?.toInt() ?? 0,
+      changedFiles: filesRaw.whereType<Map>().map((raw) {
+        final file = Map<String, dynamic>.from(raw);
+        return GhChangedFile(
+          path: file['filename']?.toString() ?? '',
+          status: file['status']?.toString() ?? '',
+          additions: (file['additions'] as num?)?.toInt() ?? 0,
+          deletions: (file['deletions'] as num?)?.toInt() ?? 0,
+        );
+      }).where((e) => e.path.isNotEmpty).toList(growable: false),
+      mergeable: pr['mergeable_state']?.toString() ?? '',
+      isDraft: pr['draft'] as bool? ?? false,
+    );
   }
 
   Future<List<GitHubWorkflowRun>> listWorkflowRuns(
