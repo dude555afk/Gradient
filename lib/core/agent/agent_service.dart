@@ -56,7 +56,9 @@ class AgentService {
 
     final github =
         workspace == null ? null : GhBackend(token: githubToken);
-    final web = webEnabled ? WebResearchService() : null;
+    final web = webEnabled && settings.webEnabledFor(selectedRole)
+        ? WebResearchService()
+        : null;
 
     var activeBranch = workspace?.branch;
     final changes = <PendingFileChange>[];
@@ -71,7 +73,7 @@ class AgentService {
           imageCount: imageDataUris.length,
         ),
       },
-      ...history.takeLast(16).map(
+      ...history.takeLast(settings.maxHistoryMessages).map(
             (e) => {'role': e.role, 'content': e.content},
           ),
       {
