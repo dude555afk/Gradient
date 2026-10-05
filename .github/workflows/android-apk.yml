@@ -204,6 +204,7 @@ jobs:
                   ).setMethodCallHandler { call, result ->
                       when (call.method) {
                           "nativeLibraryDir" -> result.success(applicationInfo.nativeLibraryDir)
+                          "cacheDir" -> result.success(cacheDir.absolutePath)
                           "installApk" -> {
                               val path = call.argument<String>("path")
                               val expectedPackage = call.argument<String>("expectedPackage")

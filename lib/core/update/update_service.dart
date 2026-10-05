@@ -98,8 +98,15 @@ class GradientUpdateService {
   }) async {
     _validateManifest(info);
 
+    final cacheDir = await _native.invokeMethod<String>('cacheDir');
+    if (cacheDir == null || cacheDir.trim().isEmpty) {
+      throw const GradientUpdateException(
+        'Android did not provide a writable update cache directory.',
+      );
+    }
+
     final directory = Directory(
-      '${Directory.systemTemp.path}/gradient-updates',
+      '${cacheDir.trim()}/gradient-updates',
     );
     if (!await directory.exists()) {
       await directory.create(recursive: true);
