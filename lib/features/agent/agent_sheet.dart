@@ -15,6 +15,7 @@ import '../../core/gh/gh_backend.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/workspace/workspace_store.dart';
 import '../../shared/gradient_markdown.dart';
+import 'kelivo_chat_widgets.dart';
 
 class AgentSheet extends StatefulWidget {
   const AgentSheet({
@@ -603,6 +604,36 @@ class _AgentSheetState extends State<AgentSheet> {
       return;
     }
 
+    if (action == 'retry' && message.role != 'user') {
+      var userIndex = index - 1;
+      while (userIndex >= 0 && _messages[userIndex].role != 'user') {
+        userIndex--;
+      }
+      if (userIndex < 0) return;
+
+      final prompt = _messages[userIndex]
+          .content
+          .replaceFirst(RegExp(r'\n\n📎 \d+ images? attached$'), '')
+          .trim();
+
+      await _createCheckpoint(label: 'Before response retry', silent: true);
+      setState(() {
+        _messages.removeRange(userIndex, _messages.length);
+        _changes.clear();
+        _pullRequests.clear();
+      });
+      await _persistSession();
+      if (mounted) await _send(prompt);
+      return;
+    }
+
+    if (action == 'delete') {
+      await _createCheckpoint(label: 'Before message delete', silent: true);
+      setState(() => _messages.removeAt(index));
+      await _persistSession();
+      return;
+    }
+
     if (action == 'branch') {
       final source = _conversation;
       if (source == null) return;
@@ -819,7 +850,7 @@ class _AgentSheetState extends State<AgentSheet> {
         _streamingNotifier.value = '';
         _messages.add(
           AgentMessage(
-            role: 'assistant',
+            role: 'error',
             content: _friendlyError(error),
           ),
         );
@@ -840,13 +871,21 @@ class _AgentSheetState extends State<AgentSheet> {
   }
 
   String _friendlyError(Object error) {
+    if (error is AiProviderException) {
+      final detail = error.friendlyMessage;
+      if (error.statusCode == 429) {
+        return 'The AI provider is rate-limited right now. Gradient retried automatically, but the provider is still busy.\n\n$detail';
+      }
+      return 'The AI provider could not complete this request.\n\n$detail';
+    }
+
     final raw = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
     if (raw.contains('gh failed')) {
-      return 'GitHub operation failed. Gradient could not complete that command.\n\n'
-          '${raw.length > 500 ? '${raw.substring(0, 500)}…' : raw}';
+      return 'GitHub could not complete that operation.\n\n'
+          '${raw.length > 260 ? '${raw.substring(0, 260)}…' : raw}';
     }
-    return 'Gradient hit an error while working on this request.\n\n'
-        '${raw.length > 500 ? '${raw.substring(0, 500)}…' : raw}';
+    return 'Gradient could not finish this request.\n\n'
+        '${raw.length > 260 ? '${raw.substring(0, 260)}…' : raw}';
   }
 
   Future<String> _ensureTaskBranch(GhBackend gh) async {
@@ -1125,8 +1164,9 @@ class _AgentSheetState extends State<AgentSheet> {
                         ],
                       ),
                     ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
+                    if (_messages.isEmpty && !_busy)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Row(
                         children: [
@@ -1172,111 +1212,47 @@ class _AgentSheetState extends State<AgentSheet> {
                               _changes.isEmpty &&
                               _pullRequests.isEmpty)
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 36),
-                              child: Text(
-                                'Ask Gradient about this repo. Chats and pending task state are saved automatically.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: cs.onSurfaceVariant,
-                                ),
+                              padding: const EdgeInsets.fromLTRB(22, 44, 22, 28),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 28,
+                                    color: cs.primary,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'What are we building?',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Ask about the repo, fix code, inspect workflows, or make a change.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: cs.onSurfaceVariant,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           for (var i = 0; i < _messages.length; i++)
-                            _MessageBubble(
+                            KelivoChatMessage(
                               message: _messages[i],
                               onAction: (action) =>
                                   _messageAction(i, action),
                             ),
                           if (_busy && _progress.isNotEmpty)
-                            Card(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    for (final event in _progress)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 2,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              event.kind == 'done'
-                                                  ? Icons.check_circle_rounded
-                                                  : event.kind == 'model'
-                                                      ? Icons.auto_awesome_rounded
-                                                      : Icons
-                                                          .terminal_rounded,
-                                              size: 15,
-                                            ),
-                                            const SizedBox(width: 7),
-                                            Expanded(
-                                              child: Text(
-                                                event.detail.isEmpty
-                                                    ? event.label
-                                                    : '${event.label} • ${event.detail}',
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            KelivoProgressTimeline(events: _progress),
                           if (_busy)
                             ValueListenableBuilder<String>(
                               valueListenable: _streamingNotifier,
-                              builder: (context, text, _) {
-                                if (text.isEmpty) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Row(
-                                      children: [
-                                        SizedBox.square(
-                                          dimension: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
-                                        SizedBox(width: 10),
-                                        Text('Gradient is working…'),
-                                      ],
-                                    ),
-                                  );
-                                }
-                                return Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Container(
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 640),
-                                    margin: const EdgeInsets.symmetric(
-                                      vertical: 5,
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 11,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: cs.surfaceContainerHigh,
-                                      borderRadius: BorderRadius.circular(18),
-                                    ),
-                                    child: GradientMarkdown(
-                                      text,
-                                      streaming: true,
-                                    ),
-                                  ),
-                                );
-                              },
+                              builder: (context, text, _) =>
+                                  KelivoStreamingMessage(text: text),
                             ),
                           if (_changes.length > 1)
                             Card(
@@ -1405,113 +1381,64 @@ class _AgentSheetState extends State<AgentSheet> {
                         ],
                       ),
                     ),
-                    const Divider(height: 1),
-                    Material(
-                      color: cs.surface,
-                      child: Padding(
-                        padding:
-                            const EdgeInsets.fromLTRB(10, 6, 10, 8),
-                        child: Column(
-                          children: [
-                            if (_pendingImages.isNotEmpty)
-                              SizedBox(
-                                height: 76,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _pendingImages.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 8),
-                                  itemBuilder: (context, index) {
-                                    final image = _pendingImages[index];
-                                    return Stack(
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          child: Image.memory(
-                                            image.bytes,
-                                            width: 72,
-                                            height: 72,
-                                            fit: BoxFit.cover,
+                    KelivoChatComposer(
+                      controller: _controller,
+                      enabled: !_busy && !_applying,
+                      busy: _busy,
+                      webEnabled: _webEnabled,
+                      onWebChanged: (value) =>
+                          setState(() => _webEnabled = value),
+                      onAttach: _pickImages,
+                      onSend: () => _send(),
+                      maxLines: keyboard > 0 ? 3 : 5,
+                      attachmentPreview: _pendingImages.isEmpty
+                          ? null
+                          : SizedBox(
+                              height: 76,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _pendingImages.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final image = _pendingImages[index];
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        child: Image.memory(
+                                          image.bytes,
+                                          width: 72,
+                                          height: 72,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: -6,
+                                        top: -6,
+                                        child: IconButton.filledTonal(
+                                          visualDensity:
+                                              VisualDensity.compact,
+                                          iconSize: 16,
+                                          tooltip: 'Remove image',
+                                          onPressed: () {
+                                            setState(
+                                              () => _pendingImages
+                                                  .removeAt(index),
+                                            );
+                                          },
+                                          icon: const Icon(
+                                            Icons.close_rounded,
                                           ),
                                         ),
-                                        Positioned(
-                                          right: -6,
-                                          top: -6,
-                                          child: IconButton.filledTonal(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            iconSize: 16,
-                                            tooltip: 'Remove image',
-                                            onPressed: () {
-                                              setState(
-                                                () => _pendingImages
-                                                    .removeAt(index),
-                                              );
-                                            },
-                                            icon: const Icon(
-                                              Icons.close_rounded,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                              ),
-                            TextField(
-                              controller: _controller,
-                              minLines: 1,
-                              maxLines: keyboard > 0 ? 3 : 5,
-                              enabled: !_busy && !_applying,
-                              textInputAction: TextInputAction.newline,
-                              decoration: const InputDecoration(
-                                hintText:
-                                    'Ask Gradient about this repo…',
-                                border: InputBorder.none,
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
-                            Row(
-                              children: [
-                                IconButton(
-                                  tooltip: 'Attach images',
-                                  onPressed:
-                                      _busy || _applying ? null : _pickImages,
-                                  icon:
-                                      const Icon(Icons.add_photo_alternate_outlined),
-                                ),
-                                FilterChip(
-                                  label: const Text('Web'),
-                                  selected: _webEnabled,
-                                  onSelected: _busy
-                                      ? null
-                                      : (value) => setState(
-                                            () => _webEnabled = value,
-                                          ),
-                                ),
-                                const Spacer(),
-                                IconButton.filled(
-                                  onPressed: _busy || _applying
-                                      ? null
-                                      : () => _send(),
-                                  icon: _busy
-                                      ? const SizedBox.square(
-                                          dimension: 18,
-                                          child:
-                                              CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.arrow_upward_rounded,
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ],
                 ),
@@ -1520,76 +1447,6 @@ class _AgentSheetState extends State<AgentSheet> {
     );
   }
 }
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({
-    required this.message,
-    required this.onAction,
-  });
-
-  final AgentMessage message;
-  final ValueChanged<String> onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final user = message.role == 'user';
-
-    return Align(
-      alignment: user ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment:
-            user ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Container(
-            constraints: const BoxConstraints(maxWidth: 640),
-            margin: const EdgeInsets.symmetric(vertical: 5),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 11,
-            ),
-            decoration: BoxDecoration(
-              color:
-                  user ? cs.primaryContainer : cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: user
-                ? SelectableText(message.content)
-                : GradientMarkdown(message.content),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Message actions',
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.more_horiz_rounded, size: 17),
-            onSelected: onAction,
-            itemBuilder: (context) => [
-              if (user)
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('Edit from here'),
-                  ),
-                ),
-              const PopupMenuItem(
-                value: 'branch',
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.call_split_rounded),
-                  title: Text('Branch conversation'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 
 class _PendingImage {
   const _PendingImage({

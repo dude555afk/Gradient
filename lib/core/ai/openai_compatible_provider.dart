@@ -298,6 +298,71 @@ class AiProviderException implements Exception {
   final int statusCode;
   final String body;
 
+  bool get retryable =>
+      statusCode == 408 ||
+      statusCode == 425 ||
+      statusCode == 429 ||
+      statusCode == 500 ||
+      statusCode == 502 ||
+      statusCode == 503 ||
+      statusCode == 504 ||
+      statusCode == 529;
+
+  String get friendlyMessage {
+    String clean = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        final root = Map<String, dynamic>.from(decoded);
+        final error = root['error'];
+        if (error is Map) {
+          final message = error['message']?.toString().trim();
+          if (message != null && message.isNotEmpty) clean = message;
+
+          final metadata = error['metadata'];
+          if (metadata is Map) {
+            final raw = metadata['raw']?.toString();
+            if (raw != null && raw.isNotEmpty) {
+              try {
+                final nested = jsonDecode(raw);
+                if (nested is Map) {
+                  final nestedError = nested['error'];
+                  if (nestedError is Map) {
+                    final nestedMessage =
+                        nestedError['message']?.toString().trim();
+                    if (nestedMessage != null && nestedMessage.isNotEmpty) {
+                      clean = nestedMessage;
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    clean = clean
+        .replaceAll(RegExp(r'https?://\S+'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (clean.length > 220) clean = '${clean.substring(0, 220)}…';
+
+    if (statusCode == 429) {
+      return clean.isEmpty
+          ? 'Too many requests. Try again in a moment or switch models.'
+          : clean;
+    }
+    if (statusCode >= 500) {
+      return clean.isEmpty
+          ? 'The provider is temporarily unavailable.'
+          : clean;
+    }
+    return clean.isEmpty ? 'Provider error $statusCode.' : clean;
+  }
+
   @override
   String toString() => 'AI provider error $statusCode: $body';
 }
