@@ -16,7 +16,12 @@ dependencies:
   shared_preferences: ^2.5.3
   flutter_secure_storage: ^9.2.4
   url_launcher: ^6.3.2
-  gpt_markdown: ^1.1.7
+  flutter_markdown: ^0.7.7+1
+  gpt_markdown:
+    git:
+      url: https://github.com/Chevey339/kelivo.git
+      ref: master
+      path: dependencies/gpt_markdown
   package_info_plus: ^8.3.1
   image_picker: ^1.1.2
 
