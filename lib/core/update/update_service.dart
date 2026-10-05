@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -158,8 +159,7 @@ class GradientUpdateService {
 
   static Map<String, dynamic> _decodeJson(String body) {
     try {
-      final value = Uri.decodeFull(body) == body ? body : body;
-      final decoded = const JsonDecoder().convert(value);
+      final decoded = jsonDecode(body);
       return Map<String, dynamic>.from(decoded as Map);
     } catch (_) {
       throw const GradientUpdateException(
