@@ -128,6 +128,15 @@ class _HomePageState extends State<HomePage> {
 
     if (number == null || notification.repository.isEmpty) return;
 
+    if (notification.unread) {
+      try {
+        final token = await _settings.githubToken();
+        await GhBackend(token: token).markNotificationRead(notification.id);
+      } catch (_) {
+        // Opening the item still matters more than failing a read receipt.
+      }
+    }
+
     final workspace = WorkspaceSelection(
       fullName: notification.repository,
       defaultBranch: notification.defaultBranch,
@@ -153,6 +162,10 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       );
+    }
+
+    if (mounted && notification.unread) {
+      await _load();
     }
   }
 
