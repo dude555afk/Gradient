@@ -368,16 +368,21 @@ class KelivoChatComposer extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: .42),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      child: Material(
+        color: cs.surfaceContainerLow,
+        elevation: 6,
+        shadowColor: Colors.black.withValues(alpha: .22),
+        borderRadius: BorderRadius.circular(22),
+        clipBehavior: Clip.antiAlias,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: .28),
+            ),
           ),
-        ),
-        child: Padding(
+          child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 5, 7, 7),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -438,6 +443,7 @@ class KelivoChatComposer extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
