@@ -177,6 +177,19 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
           ),
           actions: [
             IconButton(
+              tooltip: 'Search code',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => RepoCodeSearchPage(
+                      workspace: _workspace,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.manage_search_rounded),
+            ),
+            IconButton(
               tooltip: 'Open on GitHub',
               onPressed: () {
                 Navigator.of(context).push(
@@ -590,6 +603,151 @@ class _PullRequestsList extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class RepoCodeSearchPage extends StatefulWidget {
+  const RepoCodeSearchPage({
+    super.key,
+    required this.workspace,
+  });
+
+  final WorkspaceSelection workspace;
+
+  @override
+  State<RepoCodeSearchPage> createState() => _RepoCodeSearchPageState();
+}
+
+class _RepoCodeSearchPageState extends State<RepoCodeSearchPage> {
+  final _query = TextEditingController();
+  final _settings = AppSettingsStore();
+  List<Map<String, dynamic>> _results = const [];
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _search() async {
+    final query = _query.text.trim();
+    if (query.isEmpty || _loading) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final token = await _settings.githubToken();
+      final results =
+          await GhBackend(token: token).searchCode(
+        widget.workspace.fullName,
+        query,
+      );
+      if (!mounted) return;
+      setState(() {
+        _results = results;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search code')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SearchBar(
+              controller: _query,
+              autofocus: true,
+              hintText: 'Search this repository',
+              leading: const Icon(Icons.search_rounded),
+              trailing: [
+                IconButton(
+                  onPressed: _loading ? null : _search,
+                  icon: _loading
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.arrow_forward_rounded),
+                ),
+              ],
+              onSubmitted: (_) => _search(),
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                _error!,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          Expanded(
+            child: _results.isEmpty && !_loading
+                ? const Center(
+                    child: Text(
+                      'Search file names, symbols, strings, or code.',
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: _results.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final result = _results[index];
+                      final path = result['path']?.toString() ?? '';
+                      return ListTile(
+                        leading:
+                            const Icon(Icons.manage_search_rounded),
+                        title: Text(path),
+                        subtitle: Text(
+                          result['repository']?.toString() ??
+                              widget.workspace.fullName,
+                        ),
+                        trailing:
+                            const Icon(Icons.chevron_right_rounded),
+                        onTap: path.isEmpty
+                            ? null
+                            : () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => CodeBrowserPage(
+                                      workspace: WorkspaceSelection(
+                                        fullName:
+                                            widget.workspace.fullName,
+                                        defaultBranch:
+                                            widget.workspace.defaultBranch,
+                                        branch:
+                                            widget.workspace.defaultBranch,
+                                      ),
+                                      path: path,
+                                      isDirectory: false,
+                                      settings: _settings,
+                                    ),
+                                  ),
+                                );
+                              },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
