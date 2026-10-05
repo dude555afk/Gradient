@@ -3,6 +3,18 @@ class AgentMessage {
 
   final String role;
   final String content;
+
+  Map<String, dynamic> toJson() => {
+        'role': role,
+        'content': content,
+      };
+
+  factory AgentMessage.fromJson(Map<String, dynamic> json) {
+    return AgentMessage(
+      role: json['role']?.toString() ?? 'assistant',
+      content: json['content']?.toString() ?? '',
+    );
+  }
 }
 
 class PendingFileChange {
@@ -21,6 +33,26 @@ class PendingFileChange {
   final String? currentSha;
   final String message;
   final String branch;
+
+  Map<String, dynamic> toJson() => {
+        'path': path,
+        'oldContent': oldContent,
+        'newContent': newContent,
+        'currentSha': currentSha,
+        'message': message,
+        'branch': branch,
+      };
+
+  factory PendingFileChange.fromJson(Map<String, dynamic> json) {
+    return PendingFileChange(
+      path: json['path']?.toString() ?? '',
+      oldContent: json['oldContent']?.toString() ?? '',
+      newContent: json['newContent']?.toString() ?? '',
+      currentSha: json['currentSha']?.toString(),
+      message: json['message']?.toString() ?? '',
+      branch: json['branch']?.toString() ?? '',
+    );
+  }
 }
 
 class PendingPullRequest {
@@ -35,6 +67,34 @@ class PendingPullRequest {
   final String body;
   final String head;
   final String base;
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'body': body,
+        'head': head,
+        'base': base,
+      };
+
+  factory PendingPullRequest.fromJson(Map<String, dynamic> json) {
+    return PendingPullRequest(
+      title: json['title']?.toString() ?? 'Gradient change',
+      body: json['body']?.toString() ?? '',
+      head: json['head']?.toString() ?? '',
+      base: json['base']?.toString() ?? '',
+    );
+  }
+}
+
+class AgentProgressEvent {
+  const AgentProgressEvent({
+    required this.label,
+    this.detail = '',
+    this.kind = 'work',
+  });
+
+  final String label;
+  final String detail;
+  final String kind;
 }
 
 class AgentResult {
