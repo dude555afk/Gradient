@@ -15,12 +15,14 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
   final Map<ModelRole, TextEditingController> _primary = {};
   final Map<ModelRole, TextEditingController> _fallback = {};
   final Map<ModelRole, String> _effort = {};
+  final Map<ModelRole, bool> _web = {};
 
   List<String> _models = const [];
   AiSettings? _settings;
   bool _loading = true;
   bool _saving = false;
   bool _preferFree = true;
+  double _historyLimit = 20;
 
   @override
   void initState() {
@@ -43,12 +45,14 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
           (settings.fallbackModels[role.key] ?? const <String>[]).join(', ');
       _effort[role] =
           settings.roleReasoningEffort[role.key]?.trim() ?? '';
+      _web[role] = settings.webEnabledFor(role);
     }
 
     setState(() {
       _settings = settings;
       _models = models;
       _preferFree = settings.preferFreeModels;
+      _historyLimit = settings.maxHistoryMessages.toDouble();
       _loading = false;
     });
   }
@@ -60,6 +64,7 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
 
     final fallbacks = <String, List<String>>{};
     final efforts = <String, String>{};
+    final roleWeb = <String, bool>{};
 
     for (final role in ModelRole.values) {
       final values = _fallback[role]!
@@ -73,6 +78,7 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
 
       final effort = (_effort[role] ?? '').trim();
       if (effort.isNotEmpty) efforts[role.key] = effort;
+      roleWeb[role.key] = _web[role] ?? true;
     }
 
     final next = current.copyWith(
@@ -88,6 +94,8 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
       explainerModel: _primary[ModelRole.explainer]!.text,
       fallbackModels: fallbacks,
       roleReasoningEffort: efforts,
+      roleWebEnabled: roleWeb,
+      maxHistoryMessages: _historyLimit.round(),
       preferFreeModels: _preferFree,
     );
 
@@ -206,14 +214,34 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 36),
         children: [
           Card(
-            child: SwitchListTile(
-              value: _preferFree,
-              onChanged: (value) => setState(() => _preferFree = value),
-              secondary: const Icon(Icons.savings_outlined),
-              title: const Text('Prefer free fallbacks'),
-              subtitle: const Text(
-                'Keeps your selected primary first, then prefers free models in the fallback chain.',
-              ),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  value: _preferFree,
+                  onChanged: (value) => setState(() => _preferFree = value),
+                  secondary: const Icon(Icons.savings_outlined),
+                  title: const Text('Prefer free fallbacks'),
+                  subtitle: const Text(
+                    'Keeps your selected primary first, then prefers free models in the fallback chain.',
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.history_rounded),
+                  title: const Text('Context history'),
+                  subtitle: Text('${_historyLimit.round()} recent messages'),
+                ),
+                Slider(
+                  value: _historyLimit,
+                  min: 4,
+                  max: 80,
+                  divisions: 19,
+                  label: _historyLimit.round().toString(),
+                  onChanged: (value) =>
+                      setState(() => _historyLimit = value),
+                ),
+                const SizedBox(height: 6),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -272,6 +300,18 @@ class _ModelsRoutingPageState extends State<ModelsRoutingPage> {
                     ],
                     onChanged: (value) =>
                         setState(() => _effort[role] = value ?? ''),
+                  ),
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _web[role] ?? true,
+                    onChanged: (value) =>
+                        setState(() => _web[role] = value),
+                    secondary: const Icon(Icons.public_rounded),
+                    title: const Text('Allow web tools'),
+                    subtitle: const Text(
+                      'This role can use search/open when the chat Web toggle is on.',
+                    ),
                   ),
                 ],
               ),
