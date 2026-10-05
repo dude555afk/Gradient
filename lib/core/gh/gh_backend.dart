@@ -243,6 +243,17 @@ class GhBackend {
     }).where((e) => e.id.isNotEmpty).toList(growable: false);
   }
 
+  Future<void> markNotificationRead(String threadId) async {
+    final id = threadId.trim();
+    if (id.isEmpty) return;
+    await _runner.run([
+      'api',
+      '--method',
+      'PATCH',
+      'notifications/threads/$id',
+    ]);
+  }
+
   Future<List<GhRepository>> listRepositories() async {
     final result = await _runner.run(const [
       'repo',
