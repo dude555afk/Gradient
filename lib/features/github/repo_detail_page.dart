@@ -31,6 +31,7 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
   List<GitHubEntry> _entries = const [];
   List<GhIssue> _issues = const [];
   List<GhPullRequest> _pullRequests = const [];
+  List<GhCommit> _commits = const [];
   List<GitHubWorkflowRun> _runs = const [];
 
   @override
@@ -62,6 +63,10 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
         ),
         gh.listIssues(_workspace.fullName),
         gh.listPullRequests(_workspace.fullName),
+        gh.listCommits(
+          _workspace.fullName,
+          ref: _workspace.branch,
+        ),
         gh.listWorkflowRuns(_workspace.fullName),
       ]);
 
@@ -70,7 +75,8 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
         _entries = results[0] as List<GitHubEntry>;
         _issues = results[1] as List<GhIssue>;
         _pullRequests = results[2] as List<GhPullRequest>;
-        _runs = results[3] as List<GitHubWorkflowRun>;
+        _commits = results[3] as List<GhCommit>;
+        _runs = results[4] as List<GitHubWorkflowRun>;
         _loading = false;
       });
     } catch (error) {
@@ -145,7 +151,7 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           titleSpacing: 12,
@@ -214,6 +220,7 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
               Tab(text: 'Code'),
               Tab(text: 'Issues'),
               Tab(text: 'Pull requests'),
+              Tab(text: 'Commits'),
               Tab(text: 'Actions'),
             ],
           ),
@@ -251,6 +258,11 @@ class _RepoDetailPageState extends State<RepoDetailPage> {
                       _PullRequestsList(
                         workspace: _workspace,
                         pullRequests: _pullRequests,
+                      ),
+                      _CommitsList(
+                        workspace: _workspace,
+                        commits: _commits,
+                        onAgent: _openAgent,
                       ),
                       _ActionsList(
                         workspace: _workspace,
@@ -1107,6 +1119,57 @@ class _PullRequestDetailPageState extends State<PullRequestDetailPage> {
                           ),
                       ],
                     ),
+    );
+  }
+}
+
+class _CommitsList extends StatelessWidget {
+  const _CommitsList({
+    required this.workspace,
+    required this.commits,
+    required this.onAgent,
+  });
+
+  final WorkspaceSelection workspace;
+  final List<GhCommit> commits;
+  final void Function(String contextText) onAgent;
+
+  @override
+  Widget build(BuildContext context) {
+    if (commits.isEmpty) {
+      return const Center(child: Text('No commits found'));
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 100),
+      itemCount: commits.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final commit = commits[index];
+        final shortSha =
+            commit.sha.length > 8 ? commit.sha.substring(0, 8) : commit.sha;
+
+        return ListTile(
+          leading: const Icon(Icons.commit_rounded),
+          title: Text(
+            commit.message,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            '${commit.author.isEmpty ? 'unknown' : commit.author} • $shortSha',
+          ),
+          trailing: IconButton(
+            tooltip: 'Ask Gradient about this commit',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () => onAgent(
+              'Commit $shortSha in ${workspace.fullName} on '
+              '${workspace.branch}: ${commit.message}. '
+              'Inspect this commit and explain or review it.',
+            ),
+          ),
+        );
+      },
     );
   }
 }
