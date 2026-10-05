@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: ["bootstrap/**"]
+    branches: [main, "bootstrap/**"]
   workflow_dispatch:
 
 permissions:
@@ -294,6 +294,7 @@ jobs:
           EOF
 
       - name: Publish rolling Gradient update
+        if: github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
