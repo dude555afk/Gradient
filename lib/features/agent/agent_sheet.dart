@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/agent/agent_models.dart';
+import '../../core/agent/background_agent_runtime.dart';
 import '../../core/agent/agent_service.dart';
 import '../../core/agent/agent_session_store.dart';
 import '../../core/ai/openai_compatible_provider.dart';
@@ -14,6 +14,7 @@ import '../../core/diff/simple_diff.dart';
 import '../../core/gh/gh_backend.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/workspace/workspace_store.dart';
+import '../../shared/gradient_markdown.dart';
 
 class AgentSheet extends StatefulWidget {
   const AgentSheet({
@@ -733,6 +734,21 @@ class _AgentSheetState extends State<AgentSheet> {
     await _persistSession();
     _scrollToLatest();
 
+    final backgroundTaskId =
+        '${_conversation?.id ?? DateTime.now().microsecondsSinceEpoch}:run';
+    try {
+      await BackgroundAgentRuntime.start(
+        taskId: backgroundTaskId,
+        conversationId: _conversation?.id ?? '',
+        title: _conversation?.title == 'New chat'
+            ? widget.workspace.fullName
+            : (_conversation?.title ?? widget.workspace.fullName),
+      );
+    } catch (_) {
+      // The task still works in foreground if the native keep-alive is
+      // unavailable on a non-Android host or an older build.
+    }
+
     try {
       final result = await AgentService(
         settings: settings,
@@ -762,6 +778,14 @@ class _AgentSheetState extends State<AgentSheet> {
               if (_progress.length > 8) _progress.removeAt(0);
             }
           });
+          unawaited(
+            BackgroundAgentRuntime.update(
+              taskId: backgroundTaskId,
+              detail: event.detail.trim().isEmpty
+                  ? event.label
+                  : '${event.label} • ${event.detail}',
+            ).catchError((_) {}),
+          );
           _scrollToLatest();
         },
       );
@@ -803,6 +827,9 @@ class _AgentSheetState extends State<AgentSheet> {
       await _persistSession();
       _scrollToLatest();
     } finally {
+      try {
+        await BackgroundAgentRuntime.stop(taskId: backgroundTaskId);
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _busy = false;
@@ -1243,9 +1270,9 @@ class _AgentSheetState extends State<AgentSheet> {
                                       color: cs.surfaceContainerHigh,
                                       borderRadius: BorderRadius.circular(18),
                                     ),
-                                    child: SelectableText(
+                                    child: GradientMarkdown(
                                       text,
-                                      style: const TextStyle(height: 1.35),
+                                      streaming: true,
                                     ),
                                   ),
                                 );
@@ -1356,11 +1383,7 @@ class _AgentSheetState extends State<AgentSheet> {
                                     ),
                                     if (proposal.body.isNotEmpty) ...[
                                       const SizedBox(height: 8),
-                                      MarkdownBody(
-                                        data: proposal.body,
-                                        selectable: true,
-                                        shrinkWrap: true,
-                                      ),
+                                      GradientMarkdown(proposal.body),
                                     ],
                                     const SizedBox(height: 10),
                                     Align(
@@ -1532,11 +1555,7 @@ class _MessageBubble extends StatelessWidget {
             ),
             child: user
                 ? SelectableText(message.content)
-                : MarkdownBody(
-                    data: message.content,
-                    selectable: true,
-                    shrinkWrap: true,
-                  ),
+                : GradientMarkdown(message.content),
           ),
           PopupMenuButton<String>(
             tooltip: 'Message actions',
