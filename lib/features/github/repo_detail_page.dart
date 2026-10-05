@@ -688,6 +688,7 @@ class WorkflowRunPage extends StatefulWidget {
 
 class _WorkflowRunPageState extends State<WorkflowRunPage> {
   bool _loading = true;
+  bool _acting = false;
   String? _error;
   List<GitHubWorkflowJob> _jobs = const [];
 
@@ -697,10 +698,17 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
     _load();
   }
 
+  Future<GhBackend> _backend() async {
+    final token = await widget.settings.githubToken();
+    if (token.isEmpty) {
+      throw StateError('Connect GitHub before controlling workflows.');
+    }
+    return GhBackend(token: token);
+  }
+
   Future<void> _load() async {
     try {
-      final token = await widget.settings.githubToken();
-      final gh = GhBackend(token: token);
+      final gh = await _backend();
       final jobs = await gh.listWorkflowJobs(
         widget.workspace.fullName,
         widget.run.id,
@@ -709,6 +717,7 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
       setState(() {
         _jobs = jobs;
         _loading = false;
+        _error = null;
       });
     } catch (error) {
       if (!mounted) return;
@@ -716,6 +725,59 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
         _error = error.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _rerun({required bool failedOnly}) async {
+    if (_acting) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.rerunWorkflow(
+        widget.workspace.fullName,
+        widget.run.id,
+        failedOnly: failedOnly,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            failedOnly
+                ? 'Rerunning failed jobs.'
+                : 'Rerunning the workflow.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
+  Future<void> _cancel() async {
+    if (_acting) return;
+    setState(() => _acting = true);
+    try {
+      final gh = await _backend();
+      await gh.cancelWorkflow(
+        widget.workspace.fullName,
+        widget.run.id,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Workflow cancellation requested.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _acting = false);
     }
   }
 
@@ -788,6 +850,9 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
 
   @override
   Widget build(BuildContext context) {
+    final completed = widget.run.status.toLowerCase() == 'completed';
+    final failed = widget.run.conclusion.toLowerCase() == 'failure';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.run.name),
@@ -803,29 +868,79 @@ class _WorkflowRunPageState extends State<WorkflowRunPage> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _RepoError(message: _error!, onRetry: _load)
-              : ListView.separated(
-                  itemCount: _jobs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final job = _jobs[index];
-                    return ListTile(
-                      leading: Icon(
-                        job.conclusion.toLowerCase() == 'failure'
-                            ? Icons.cancel_outlined
-                            : job.status.toLowerCase() == 'completed'
-                                ? Icons.check_circle_outline_rounded
-                                : Icons.pending_outlined,
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            if (completed)
+                              FilledButton.tonalIcon(
+                                onPressed: _acting
+                                    ? null
+                                    : () => _rerun(failedOnly: false),
+                                icon: const Icon(Icons.replay_rounded),
+                                label: const Text('Rerun'),
+                              ),
+                            if (completed && failed) ...[
+                              const SizedBox(width: 8),
+                              FilledButton.tonalIcon(
+                                onPressed: _acting
+                                    ? null
+                                    : () => _rerun(failedOnly: true),
+                                icon:
+                                    const Icon(Icons.restart_alt_rounded),
+                                label: const Text('Rerun failed'),
+                              ),
+                            ],
+                            if (!completed)
+                              FilledButton.tonalIcon(
+                                onPressed: _acting ? null : _cancel,
+                                icon: const Icon(Icons.stop_circle_outlined),
+                                label: const Text('Cancel run'),
+                              ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: _acting ? null : _load,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Refresh jobs'),
+                            ),
+                          ],
+                        ),
                       ),
-                      title: Text(job.name),
-                      subtitle: Text(
-                        job.conclusion.isEmpty
-                            ? job.status
-                            : job.conclusion,
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: _jobs.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final job = _jobs[index];
+                          return ListTile(
+                            leading: Icon(
+                              job.conclusion.toLowerCase() == 'failure'
+                                  ? Icons.cancel_outlined
+                                  : job.status.toLowerCase() == 'completed'
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.pending_outlined,
+                            ),
+                            title: Text(job.name),
+                            subtitle: Text(
+                              job.conclusion.isEmpty
+                                  ? job.status
+                                  : job.conclusion,
+                            ),
+                            trailing:
+                                const Icon(Icons.article_outlined),
+                            onTap: () => _openLog(job),
+                          );
+                        },
                       ),
-                      trailing: const Icon(Icons.article_outlined),
-                      onTap: () => _openLog(job),
-                    );
-                  },
+                    ),
+                  ],
                 ),
     );
   }
