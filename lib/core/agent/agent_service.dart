@@ -103,27 +103,48 @@ class AgentService {
           ),
         );
 
-        final turn = await ai.completeStreaming(
-          model: model,
-          messages: messages,
-          tools: tools,
-          reasoningEffort: settings.reasoningEffort,
-          onDelta: onTextDelta,
-        );
+        AiTurn? turn;
+        for (var attempt = 0; attempt < 4; attempt++) {
+          try {
+            turn = await ai.completeStreaming(
+              model: model,
+              messages: messages,
+              tools: tools,
+              reasoningEffort: settings.reasoningEffort,
+              onDelta: onTextDelta,
+            );
+            break;
+          } on AiProviderException catch (error) {
+            if (!error.retryable || attempt == 3) rethrow;
+            final wait = Duration(milliseconds: 900 * (1 << attempt));
+            onProgress?.call(
+              AgentProgressEvent(
+                label: error.statusCode == 429
+                    ? 'Rate limited · retrying'
+                    : 'Provider busy · retrying',
+                detail: '${wait.inMilliseconds ~/ 1000 + 1}s',
+                kind: 'model',
+              ),
+            );
+            await Future<void>.delayed(wait);
+          }
+        }
+
+        final completedTurn = turn!;
 
         messages.add({
           'role': 'assistant',
-          'content': turn.content,
-          if (turn.assistantMessage['tool_calls'] != null)
-            'tool_calls': turn.assistantMessage['tool_calls'],
+          'content': completedTurn.content,
+          if (completedTurn.assistantMessage['tool_calls'] != null)
+            'tool_calls': completedTurn.assistantMessage['tool_calls'],
         });
 
-        if (turn.toolCalls.isEmpty) {
-          finalText = turn.content.trim();
+        if (completedTurn.toolCalls.isEmpty) {
+          finalText = completedTurn.content.trim();
           break;
         }
 
-        for (final call in turn.toolCalls) {
+        for (final call in completedTurn.toolCalls) {
           onProgress?.call(
             AgentProgressEvent(
               label: _progressLabel(call.name),
