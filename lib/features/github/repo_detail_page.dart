@@ -1485,8 +1485,216 @@ class _CommitsList extends StatelessWidget {
               'Inspect this commit and explain or review it.',
             ),
           ),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CommitDetailPage(
+                  workspace: workspace,
+                  sha: commit.sha,
+                ),
+              ),
+            );
+          },
         );
       },
+    );
+  }
+}
+
+class CommitDetailPage extends StatefulWidget {
+  const CommitDetailPage({
+    super.key,
+    required this.workspace,
+    required this.sha,
+  });
+
+  final WorkspaceSelection workspace;
+  final String sha;
+
+  @override
+  State<CommitDetailPage> createState() => _CommitDetailPageState();
+}
+
+class _CommitDetailPageState extends State<CommitDetailPage> {
+  final _settings = AppSettingsStore();
+  GhCommitDetail? _commit;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final token = await _settings.githubToken();
+      final commit = await GhBackend(token: token).commitDetail(
+        widget.workspace.fullName,
+        widget.sha,
+      );
+      if (!mounted) return;
+      setState(() {
+        _commit = commit;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _askGradient() {
+    final commit = _commit;
+    final shortSha =
+        widget.sha.length > 8 ? widget.sha.substring(0, 8) : widget.sha;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => AgentSheet(
+        workspace: widget.workspace,
+        contextText: commit == null
+            ? 'Native commit $shortSha.'
+            : 'Native commit ${commit.sha}: ${commit.message}. '
+                'Author: ${commit.author}. '
+                '+${commit.additions}/-${commit.deletions}. '
+                'Changed files: ${commit.files.map((e) => e.path).join(', ')}.',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final commit = _commit;
+    final shortSha =
+        widget.sha.length > 8 ? widget.sha.substring(0, 8) : widget.sha;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Commit $shortSha'),
+        actions: [
+          IconButton(
+            tooltip: 'Ask Gradient',
+            onPressed: _askGradient,
+            icon: const Icon(Icons.auto_awesome_rounded),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _RepoError(message: _error!, onRetry: _load)
+              : commit == null
+                  ? const Center(child: Text('Commit unavailable'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 80),
+                      children: [
+                        SelectableText(
+                          commit.message,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            Chip(
+                              avatar: const Icon(
+                                Icons.person_outline_rounded,
+                                size: 16,
+                              ),
+                              label: Text(
+                                commit.author.isEmpty
+                                    ? 'unknown'
+                                    : commit.author,
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                commit.sha.length > 12
+                                    ? commit.sha.substring(0, 12)
+                                    : commit.sha,
+                              ),
+                            ),
+                            Chip(
+                              label: Text(
+                                '+${commit.additions} / -${commit.deletions}',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Changed files (${commit.files.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        for (final file in commit.files)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ExpansionTile(
+                              leading: const Icon(
+                                Icons.description_outlined,
+                              ),
+                              title: Text(file.path),
+                              subtitle: Text(
+                                '${file.status} • +${file.additions} / -${file.deletions}',
+                              ),
+                              childrenPadding:
+                                  const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                              children: [
+                                if (file.patch.isEmpty)
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'GitHub did not provide a text patch for this file.',
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    width: double.infinity,
+                                    constraints:
+                                        const BoxConstraints(maxHeight: 520),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: SingleChildScrollView(
+                                        child: SelectableText(
+                                          file.patch,
+                                          style: const TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontSize: 11.5,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
     );
   }
 }
