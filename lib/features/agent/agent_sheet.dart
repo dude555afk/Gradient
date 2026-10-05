@@ -232,11 +232,123 @@ class _AgentSheetState extends State<AgentSheet> {
     await _persistSession();
   }
 
+  Future<void> _createCheckpoint({
+    String label = 'Checkpoint',
+    bool silent = false,
+  }) async {
+    final current = _conversation;
+    if (current == null) return;
+
+    final now = DateTime.now();
+    final checkpoint = AgentCheckpoint(
+      id: now.microsecondsSinceEpoch.toString(),
+      label: label,
+      messages: List<AgentMessage>.from(_messages),
+      changes: List<PendingFileChange>.from(_changes),
+      pullRequests: List<PendingPullRequest>.from(_pullRequests),
+      taskBranch: _taskBranch,
+      createdAt: now,
+    );
+
+    final checkpoints = <AgentCheckpoint>[
+      checkpoint,
+      ...current.checkpoints,
+    ].take(12).toList(growable: false);
+
+    setState(() {
+      _conversation = current.copyWith(checkpoints: checkpoints);
+    });
+    await _persistSession();
+
+    if (!silent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Checkpoint saved')),
+      );
+    }
+  }
+
+  Future<void> _showCheckpoints() async {
+    final current = _conversation;
+    if (current == null || _busy || _applying) return;
+
+    if (current.checkpoints.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No checkpoints in this chat yet.')),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<AgentCheckpoint>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .6,
+          child: Column(
+            children: [
+              const ListTile(
+                leading: Icon(Icons.bookmarks_rounded),
+                title: Text(
+                  'Checkpoints',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: current.checkpoints.length,
+                  itemBuilder: (context, index) {
+                    final checkpoint = current.checkpoints[index];
+                    return ListTile(
+                      leading: const Icon(Icons.restore_rounded),
+                      title: Text(checkpoint.label),
+                      subtitle: Text(
+                        '${checkpoint.messages.length} messages • '
+                        '${checkpoint.createdAt.toLocal().toString().substring(0, 16)}',
+                      ),
+                      onTap: () =>
+                          Navigator.pop(context, checkpoint),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (selected == null || !mounted) return;
+
+    setState(() {
+      _messages
+        ..clear()
+        ..addAll(selected.messages);
+      _changes
+        ..clear()
+        ..addAll(selected.changes);
+      _pullRequests
+        ..clear()
+        ..addAll(selected.pullRequests);
+      _taskBranch = selected.taskBranch;
+      _conversation = current.copyWith(
+        messages: List<AgentMessage>.from(selected.messages),
+        changes: List<PendingFileChange>.from(selected.changes),
+        pullRequests:
+            List<PendingPullRequest>.from(selected.pullRequests),
+        taskBranch: selected.taskBranch,
+        clearTaskBranch: selected.taskBranch == null,
+      );
+    });
+    await _persistSession();
+    _scrollToLatest();
+  }
+
   Future<void> _messageAction(int index, String action) async {
     if (_busy || index < 0 || index >= _messages.length) return;
     final message = _messages[index];
 
     if (action == 'edit' && message.role == 'user') {
+      await _createCheckpoint(label: 'Before message edit', silent: true);
       setState(() {
         _controller.text = message.content;
         _controller.selection = TextSelection.collapsed(
@@ -691,6 +803,38 @@ class _AgentSheetState extends State<AgentSheet> {
                             tooltip: 'New chat',
                             onPressed: _busy ? null : _newConversation,
                             icon: const Icon(Icons.add_comment_outlined),
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Checkpoints',
+                            icon: const Icon(Icons.bookmarks_outlined),
+                            enabled: !_busy && !_applying,
+                            onSelected: (value) {
+                              if (value == 'save') {
+                                _createCheckpoint();
+                              } else if (value == 'restore') {
+                                _showCheckpoints();
+                              }
+                            },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'save',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.bookmark_add_outlined),
+                                  title: Text('Create checkpoint'),
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'restore',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.restore_rounded),
+                                  title: Text('Restore checkpoint'),
+                                ),
+                              ),
+                            ],
                           ),
                           IconButton(
                             onPressed: () => Navigator.pop(context),
