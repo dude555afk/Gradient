@@ -150,8 +150,9 @@ class _AgentSheetState extends State<AgentSheet> {
           })
           .join('\n');
 
-      final clipped =
-          source.length > 3000 ? source.substring(source.length - 3000) : source;
+      final clipped = source.length > 3000
+          ? source.substring(source.length - 3000)
+          : source;
       final model = settings.fastModel.trim().isNotEmpty
           ? settings.fastModel.trim()
           : settings.defaultModel.trim();
@@ -190,7 +191,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() => _conversation = renamed);
       await _sessionStore.save(renamed);
     } catch (_) {
-      // Title generation is cosmetic. Never interrupt the actual chat.
+      // Title generation is cosmetic and must never break chat.
     } finally {
       provider.dispose();
       _titleGenerationInFlight = false;
@@ -201,13 +202,12 @@ class _AgentSheetState extends State<AgentSheet> {
     var title = raw
         .split('\n')
         .first
-        .replaceAll(RegExp(r'^[#>*_\-"\'\s]+|[#>*_\-"\'\s]+\
+        .replaceAll(RegExp(r'^[#>*_\-\s]+|[#>*_\-\s]+\
 
   Future<void> _newConversation() async {
     if (_busy || _applying) return;
 
-    final current = _conversation;
-    if (current != null &&
+    if (_conversation != null &&
         _messages.isEmpty &&
         _changes.isEmpty &&
         _pullRequests.isEmpty) {
@@ -279,13 +279,7 @@ class _AgentSheetState extends State<AgentSheet> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (active)
-                                    const Padding(
-                                      padding: EdgeInsets.only(right: 2),
-                                      child: Icon(
-                                        Icons.check_rounded,
-                                        size: 18,
-                                      ),
-                                    ),
+                                    const Icon(Icons.check_rounded, size: 18),
                                   IconButton(
                                     tooltip: 'Rename chat',
                                     icon: const Icon(Icons.edit_outlined),
@@ -335,9 +329,7 @@ class _AgentSheetState extends State<AgentSheet> {
                                         return;
                                       }
 
-                                      if (sheetContext.mounted) {
-                                        setSheetState(() {});
-                                      }
+                                      setSheetState(() {});
                                     },
                                   ),
                                 ],
@@ -612,7 +604,6 @@ class _AgentSheetState extends State<AgentSheet> {
   void _scrollToLatest() {
     if (_scrollTickPending) return;
     _scrollTickPending = true;
-
     Future<void>.delayed(const Duration(milliseconds: 55), () {
       _scrollTickPending = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1226,7 +1217,6 @@ class _AgentSheetState extends State<AgentSheet> {
                                     ),
                                   );
                                 }
-
                                 return Align(
                                   alignment: Alignment.centerLeft,
                                   child: Container(
@@ -1584,6 +1574,8 @@ class _PendingImage {
   final String dataUri;
 }
 ), '')
+        .replaceAll('"', '')
+        .replaceAll("'", '')
         .replaceAll(RegExp(r'[.!?:;]+\
 
   Future<void> _newConversation() async {
