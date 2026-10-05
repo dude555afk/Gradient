@@ -3,6 +3,30 @@ import 'dart:convert';
 import '../github/github_models.dart';
 import 'gh_command_runner.dart';
 
+class GhNotification {
+  const GhNotification({
+    required this.id,
+    required this.repository,
+    required this.defaultBranch,
+    required this.title,
+    required this.type,
+    required this.reason,
+    required this.unread,
+    required this.updatedAt,
+    required this.subjectUrl,
+  });
+
+  final String id;
+  final String repository;
+  final String defaultBranch;
+  final String title;
+  final String type;
+  final String reason;
+  final bool unread;
+  final String updatedAt;
+  final String subjectUrl;
+}
+
 class GhRepository {
   const GhRepository({
     required this.fullName,
@@ -185,6 +209,38 @@ class GhBackend {
       name: json['name'] as String? ?? '',
       avatarUrl: json['avatar_url'] as String? ?? '',
     );
+  }
+
+  Future<List<GhNotification>> listNotifications({
+    bool all = false,
+    int limit = 50,
+  }) async {
+    final result = await _runner.run([
+      'api',
+      'notifications?all=${all ? 'true' : 'false'}&per_page=$limit',
+    ]);
+    final raw = jsonDecode(result.stdout) as List<dynamic>;
+
+    return raw.whereType<Map>().map((entry) {
+      final json = Map<String, dynamic>.from(entry);
+      final repository =
+          json['repository'] as Map<String, dynamic>? ?? const {};
+      final subject =
+          json['subject'] as Map<String, dynamic>? ?? const {};
+
+      return GhNotification(
+        id: json['id']?.toString() ?? '',
+        repository: repository['full_name']?.toString() ?? '',
+        defaultBranch:
+            repository['default_branch']?.toString() ?? 'main',
+        title: subject['title']?.toString() ?? '',
+        type: subject['type']?.toString() ?? '',
+        reason: json['reason']?.toString() ?? '',
+        unread: json['unread'] as bool? ?? false,
+        updatedAt: json['updated_at']?.toString() ?? '',
+        subjectUrl: subject['url']?.toString() ?? '',
+      );
+    }).where((e) => e.id.isNotEmpty).toList(growable: false);
   }
 
   Future<List<GhRepository>> listRepositories() async {
