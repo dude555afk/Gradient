@@ -250,12 +250,24 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.gradient_rounded),
-            SizedBox(width: 8),
-            Text('Gradient'),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 19,
+                color: Theme.of(context).colorScheme.onSecondaryContainer,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text('Gradient'),
           ],
         ),
         actions: [
@@ -276,7 +288,12 @@ class _HomePageState extends State<HomePage> {
         icon: const Icon(Icons.auto_awesome_rounded),
         label: const Text('Gradient'),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (index) => setState(() => _tab = index),
         destinations: [
@@ -301,6 +318,8 @@ class _HomePageState extends State<HomePage> {
             label: 'Inbox',
           ),
         ],
+          ),
+        ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -428,7 +447,7 @@ class _HomeFeed extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 112),
         children: [
           Row(
             children: [
@@ -470,29 +489,57 @@ class _HomeFeed extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          if (lastWorkspace != null)
+          const SizedBox(height: 22),
+          if (lastWorkspace != null) ...[
+            Text(
+              'Continue',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: const Icon(Icons.history_rounded),
-                title: const Text('Last workspace'),
-                subtitle: Text(
-                  '${lastWorkspace!.fullName} • ${lastWorkspace!.branch}',
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                leading: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: cs.secondaryContainer,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    Icons.history_rounded,
+                    color: cs.onSecondaryContainer,
+                  ),
                 ),
-                trailing: const Icon(Icons.chevron_right_rounded),
+                title: Text(
+                  lastWorkspace!.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(lastWorkspace!.branch),
+                trailing: const Icon(Icons.arrow_forward_rounded),
                 onTap: () => onLastWorkspace(lastWorkspace!),
               ),
             ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 18),
+          ],
           Text(
             'Recently updated',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
           ),
           const SizedBox(height: 8),
           for (final repo in repos)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Card(
               child: ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
                 leading: Icon(
                   repo.isPrivate
                       ? Icons.lock_outline_rounded
@@ -511,6 +558,7 @@ class _HomeFeed extends StatelessWidget {
                   color: cs.onSurfaceVariant,
                 ),
                 onTap: () => onRepo(repo),
+              ),
               ),
             ),
         ],
@@ -535,7 +583,7 @@ class _ReposView extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
           child: SearchBar(
             controller: search,
             hintText: 'Search repositories',
