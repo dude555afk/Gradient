@@ -219,50 +219,125 @@ class _AgentSheetState extends State<AgentSheet> {
         await _sessionStore.list(widget.workspace.fullName);
     if (!mounted) return;
 
+    final items = List<AgentConversation>.from(conversations);
     final selected = await showModalBottomSheet<AgentConversation>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .65,
-          child: Column(
-            children: [
-              const ListTile(
-                leading: Icon(Icons.history_rounded),
-                title: Text(
-                  'Gradient chats',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * .68,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.history_rounded),
+                  title: const Text(
+                    'Gradient chats',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${items.length} saved chat${items.length == 1 ? '' : 's'}',
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: conversations.length,
-                  itemBuilder: (context, index) {
-                    final item = conversations[index];
-                    final active = item.id == _conversation?.id;
-                    return ListTile(
-                      leading: Icon(
-                        active
-                            ? Icons.chat_bubble_rounded
-                            : Icons.chat_bubble_outline_rounded,
-                      ),
-                      title: Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        '${item.messages.length} messages • '
-                        '${item.updatedAt.toLocal().toString().substring(0, 16)}',
-                      ),
-                      trailing:
-                          active ? const Icon(Icons.check_rounded) : null,
-                      onTap: () => Navigator.pop(context, item),
-                    );
-                  },
+                const Divider(height: 1),
+                Expanded(
+                  child: items.isEmpty
+                      ? const Center(child: Text('No saved chats yet.'))
+                      : ListView.builder(
+                          itemCount: items.length,
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            final active = item.id == _conversation?.id;
+                            return ListTile(
+                              leading: Icon(
+                                active
+                                    ? Icons.chat_bubble_rounded
+                                    : Icons.chat_bubble_outline_rounded,
+                              ),
+                              title: Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${item.messages.length} messages • '
+                                '${item.updatedAt.toLocal().toString().substring(0, 16)}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (active)
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 2),
+                                      child: Icon(
+                                        Icons.check_rounded,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  IconButton(
+                                    tooltip: 'Rename chat',
+                                    icon: const Icon(Icons.edit_outlined),
+                                    onPressed: () async {
+                                      final renamed =
+                                          await _renameStoredConversation(item);
+                                      if (renamed == null ||
+                                          !sheetContext.mounted) {
+                                        return;
+                                      }
+                                      setSheetState(() {
+                                        items[index] = renamed;
+                                      });
+                                    },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete chat',
+                                    icon: const Icon(Icons.delete_outline_rounded),
+                                    onPressed: () async {
+                                      final confirmed =
+                                          await _confirmDeleteConversation(item);
+                                      if (!confirmed ||
+                                          !sheetContext.mounted) {
+                                        return;
+                                      }
+
+                                      await _sessionStore.delete(
+                                        widget.workspace.fullName,
+                                        item.id,
+                                      );
+                                      final wasActive =
+                                          item.id == _conversation?.id;
+                                      items.removeAt(index);
+
+                                      if (wasActive) {
+                                        final replacement = items.isNotEmpty
+                                            ? items.first
+                                            : await _sessionStore.create(
+                                                widget.workspace.fullName,
+                                              );
+                                        if (sheetContext.mounted) {
+                                          Navigator.pop(
+                                            sheetContext,
+                                            replacement,
+                                          );
+                                        }
+                                        return;
+                                      }
+
+                                      if (sheetContext.mounted) {
+                                        setSheetState(() {});
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                              onTap: () => Navigator.pop(context, item),
+                            );
+                          },
+                        ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -271,6 +346,77 @@ class _AgentSheetState extends State<AgentSheet> {
     if (selected != null && mounted) {
       _loadConversation(selected);
     }
+  }
+
+  Future<AgentConversation?> _renameStoredConversation(
+    AgentConversation conversation,
+  ) async {
+    final controller = TextEditingController(text: conversation.title);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename chat'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(hintText: 'Chat name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              controller.text.trim(),
+            ),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (title == null || title.trim().isEmpty) return null;
+    final renamed = conversation.copyWith(
+      title: title.trim(),
+      updatedAt: DateTime.now(),
+    );
+    await _sessionStore.save(renamed);
+
+    if (mounted && _conversation?.id == renamed.id) {
+      setState(() => _conversation = renamed);
+    }
+    return renamed;
+  }
+
+  Future<bool> _confirmDeleteConversation(
+    AgentConversation conversation,
+  ) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete chat?'),
+            content: Text(
+              'Delete “${conversation.title}” and its saved task state? '
+              'This cannot be undone.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _renameConversation() async {
