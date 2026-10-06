@@ -19,7 +19,7 @@ KEEP = [
     "lib/features/workspace/github_workspace_page.dart",
 ]
 
-COPY_DIRS = ["lib", "dependencies", "android", "assets"]
+COPY_DIRS = ["lib", "dependencies", "android", "assets", "tool"]
 COPY_FILES = [
     "pubspec.yaml",
     "pubspec.lock",
