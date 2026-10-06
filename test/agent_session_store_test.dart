@@ -10,8 +10,8 @@ void main() {
       repoFullName: 'owner/repo',
       title: 'Fix workflow',
       messages: const [
-        AgentMessage(role: 'user', content: 'Fix it'),
-        AgentMessage(role: 'assistant', content: 'Working on it'),
+        AgentMessage.create(role: 'user', content: 'Fix it'),
+        AgentMessage.create(role: 'assistant', content: 'Working on it'),
       ],
       changes: const [
         PendingFileChange(
@@ -36,7 +36,7 @@ void main() {
           id: 'cp-1',
           label: 'Before edit',
           messages: const [
-            AgentMessage(role: 'user', content: 'Fix it'),
+            AgentMessage.create(role: 'user', content: 'Fix it'),
           ],
           changes: const [],
           pullRequests: const [],
