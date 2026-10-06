@@ -1,16 +1,49 @@
 class AgentMessage {
-  const AgentMessage({required this.role, required this.content});
+  const AgentMessage({
+    required this.id,
+    required this.role,
+    required this.content,
+  });
 
+  factory AgentMessage.create({
+    required String role,
+    required String content,
+  }) {
+    return AgentMessage(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      role: role,
+      content: content,
+    );
+  }
+
+  final String id;
   final String role;
   final String content;
 
+  AgentMessage copyWith({
+    String? id,
+    String? role,
+    String? content,
+  }) {
+    return AgentMessage(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      content: content ?? this.content,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
+        'id': id,
         'role': role,
         'content': content,
       };
 
   factory AgentMessage.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id']?.toString().trim() ?? '';
     return AgentMessage(
+      id: rawId.isEmpty
+          ? DateTime.now().microsecondsSinceEpoch.toString()
+          : rawId,
       role: json['role']?.toString() ?? 'assistant',
       content: json['content']?.toString() ?? '',
     );

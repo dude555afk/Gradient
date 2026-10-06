@@ -1,13 +1,70 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/agent/agent_models.dart';
+import '../../core/agent/kelivo_streaming_content_notifier.dart';
 import '../../core/models/model_router.dart';
 import '../../shared/gradient_markdown.dart';
+import 'assistant_paragraph_splitter.dart';
 
 class KelivoChatMessage extends StatelessWidget {
   const KelivoChatMessage({
     super.key,
+    required this.message,
+    required this.onAction,
+    this.streamingListenable,
+  });
+
+  final AgentMessage message;
+  final ValueChanged<String> onAction;
+  final ValueListenable<StreamingContentData>? streamingListenable;
+
+  bool get _isUser => message.role == 'user';
+  bool get _isError => message.role == 'error';
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isError) {
+      return _ErrorMessage(
+        message: message,
+        onRetry: () => onAction('retry'),
+      );
+    }
+
+    if (_isUser) {
+      return _UserMessage(
+        message: message,
+        onAction: onAction,
+      );
+    }
+
+    final live = streamingListenable;
+    if (live == null) {
+      return _AssistantMessage(
+        content: message.content,
+        onAction: onAction,
+      );
+    }
+
+    return ValueListenableBuilder<StreamingContentData>(
+      valueListenable: live,
+      builder: (context, data, _) {
+        return _AssistantMessage(
+          content: data.content,
+          streaming: true,
+          progress: data.progress,
+          retryStatus: data.retryStatus,
+          model: data.model,
+          onAction: onAction,
+        );
+      },
+    );
+  }
+}
+
+class _UserMessage extends StatelessWidget {
+  const _UserMessage({
     required this.message,
     required this.onAction,
   });
@@ -15,88 +72,41 @@ class KelivoChatMessage extends StatelessWidget {
   final AgentMessage message;
   final ValueChanged<String> onAction;
 
-  bool get _isUser => message.role == 'user';
-  bool get _isError => message.role == 'error';
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    if (_isError) {
-      final rateLimited = message.content.toLowerCase().contains('rate-limit') ||
-          message.content.toLowerCase().contains('rate limit') ||
-          message.content.contains('429');
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(
-              rateLimited
-                  ? Icons.schedule_rounded
-                  : Icons.error_outline_rounded,
-              size: 17,
-              color: cs.onSurfaceVariant,
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                rateLimited
-                    ? 'Provider is busy right now.'
-                    : 'Gradient could not finish that response.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.35,
-                    ),
-              ),
-            ),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Retry',
-              onPressed: () => onAction('retry'),
-              icon: const Icon(Icons.refresh_rounded, size: 19),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Column(
-        crossAxisAlignment:
-            _isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Align(
-            alignment:
-                _isUser ? Alignment.centerRight : Alignment.centerLeft,
+            alignment: Alignment.centerRight,
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.sizeOf(context).width * .82,
               ),
-              child: _isUser
-                  ? DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 13,
-                          vertical: 9,
-                        ),
-                        child: SelectableText(
-                          message.content,
-                          style: const TextStyle(height: 1.42),
-                        ),
-                      ),
-                    )
-                  : _AssistantParagraphs(text: message.content),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                    vertical: 9,
+                  ),
+                  child: SelectableText(
+                    message.content,
+                    style: const TextStyle(height: 1.42),
+                  ),
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 0),
           _MessageActions(
-            isUser: _isUser,
+            isUser: true,
             content: message.content,
             onAction: onAction,
           ),
@@ -106,100 +116,191 @@ class KelivoChatMessage extends StatelessWidget {
   }
 }
 
-class KelivoStreamingMessage extends StatelessWidget {
-  const KelivoStreamingMessage({
-    super.key,
-    required this.text,
+class _AssistantMessage extends StatelessWidget {
+  const _AssistantMessage({
+    required this.content,
+    required this.onAction,
+    this.streaming = false,
+    this.progress = const [],
+    this.retryStatus,
+    this.model = '',
   });
 
-  final String text;
+  final String content;
+  final ValueChanged<String> onAction;
+  final bool streaming;
+  final List<AgentProgressEvent> progress;
+  final RetryStatus? retryStatus;
+  final String model;
 
   @override
   Widget build(BuildContext context) {
-    if (text.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
-        child: Row(
-          children: [
-            SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.8,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: 9),
-            Text(
-              'Working…',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
-        ),
-      );
-    }
+    final hasBody = content.trim().isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680),
-        child: _AssistantParagraphs(
-          text: text,
-          streaming: true,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (progress.isNotEmpty)
+            _AssistantTimeline(
+              events: progress,
+              retryStatus: retryStatus,
+              model: model,
+            )
+          else if (streaming && !hasBody)
+            _WorkingRow(model: model),
+          if (hasBody)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: _AssistantParagraphs(
+                text: content,
+                streaming: streaming,
+              ),
+            ),
+          if (!streaming && hasBody)
+            _MessageActions(
+              isUser: false,
+              content: content,
+              onAction: onAction,
+            ),
+        ],
       ),
     );
   }
 }
 
-class KelivoProgressTimeline extends StatelessWidget {
-  const KelivoProgressTimeline({
-    super.key,
-    required this.events,
+class _ErrorMessage extends StatelessWidget {
+  const _ErrorMessage({
+    required this.message,
+    required this.onRetry,
   });
 
-  final List<AgentProgressEvent> events;
+  final AgentMessage message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (events.isEmpty) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    final lower = message.content.toLowerCase();
+    final busy = lower.contains('rate-limit') ||
+        lower.contains('rate limit') ||
+        lower.contains('429') ||
+        lower.contains('busy');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 8, 2, 12),
+      child: Row(
+        children: [
+          Icon(
+            busy ? Icons.schedule_rounded : Icons.error_outline_rounded,
+            size: 17,
+            color: cs.onSurfaceVariant,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              busy
+                  ? 'Provider is busy right now.'
+                  : 'Gradient could not finish that response.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Retry',
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded, size: 19),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkingRow extends StatelessWidget {
+  const _WorkingRow({required this.model});
+
+  final String model;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 6, 2, 10),
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 15,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.8,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              model.trim().isEmpty ? 'Working…' : 'Working · $model',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssistantTimeline extends StatelessWidget {
+  const _AssistantTimeline({
+    required this.events,
+    required this.retryStatus,
+    required this.model,
+  });
+
+  final List<AgentProgressEvent> events;
+  final RetryStatus? retryStatus;
+  final String model;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final visible = events.length > 5
         ? events.sublist(events.length - 5)
         : events;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
+      padding: const EdgeInsets.fromLTRB(2, 1, 2, 9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var i = 0; i < visible.length; i++)
+          for (final event in visible)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Icon(
-                      visible[i].kind == 'done'
-                          ? Icons.check_circle_rounded
-                          : visible[i].kind == 'model'
-                              ? Icons.auto_awesome_rounded
-                              : Icons.terminal_rounded,
-                      size: 14,
-                      color: visible[i].kind == 'done'
-                          ? cs.primary
-                          : cs.onSurfaceVariant,
-                    ),
+                  Icon(
+                    event.kind == 'done'
+                        ? Icons.check_circle_rounded
+                        : event.kind == 'work'
+                            ? Icons.terminal_rounded
+                            : Icons.auto_awesome_rounded,
+                    size: 14,
+                    color: cs.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      visible[i].detail.trim().isEmpty
-                          ? visible[i].label
-                          : '${visible[i].label} · ${visible[i].detail}',
+                      event.detail.trim().isEmpty
+                          ? event.label
+                          : '${event.label} · ${event.detail}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -210,6 +311,26 @@ class KelivoProgressTimeline extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          if (retryStatus != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                '${retryStatus!.label} · '
+                '${retryStatus!.attempt}/${retryStatus!.maxRetries}',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+              ),
+            ),
+          if (model.trim().isNotEmpty && visible.isEmpty)
+            Text(
+              model,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
             ),
         ],
       ),
@@ -228,7 +349,7 @@ class _AssistantParagraphs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chunks = splitKelivoAssistantParagraphs(text);
+    final chunks = splitAssistantParagraphs(text);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -331,8 +452,12 @@ Future<String?> showKelivoMessageActions(
             if (!isUser)
               item('retry', Icons.refresh_rounded, 'Retry response'),
             item('branch', Icons.call_split_rounded, 'Branch conversation'),
-            item('delete', Icons.delete_outline_rounded, 'Delete message',
-                danger: true),
+            item(
+              'delete',
+              Icons.delete_outline_rounded,
+              'Delete message',
+              danger: true,
+            ),
           ],
         ),
       ),
@@ -475,44 +600,4 @@ class KelivoChatComposer extends StatelessWidget {
       ),
     );
   }
-}
-
-List<String> splitKelivoAssistantParagraphs(String text) {
-  if (text.trim().isEmpty) return <String>[text];
-
-  final lines = text.split('\n');
-  final chunks = <String>[];
-  final current = <String>[];
-  var fenced = false;
-  String fenceMarker = '';
-
-  void flush() {
-    final value = current.join('\n').trim();
-    if (value.isNotEmpty) chunks.add(value);
-    current.clear();
-  }
-
-  for (final line in lines) {
-    final trimmed = line.trimLeft();
-    final fence = RegExp(r'^(\x60{3,}|~{3,})').firstMatch(trimmed);
-    if (fence != null) {
-      final marker = fence.group(1)!;
-      if (!fenced) {
-        fenced = true;
-        fenceMarker = marker[0];
-      } else if (marker.startsWith(fenceMarker)) {
-        fenced = false;
-        fenceMarker = '';
-      }
-    }
-
-    if (!fenced && line.trim().isEmpty) {
-      flush();
-    } else {
-      current.add(line);
-    }
-  }
-
-  flush();
-  return chunks.isEmpty ? <String>[text] : chunks;
 }

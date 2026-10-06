@@ -10,6 +10,7 @@ import 'agent_models.dart';
 import 'agent_service.dart';
 import 'agent_session_store.dart';
 import 'background_agent_runtime.dart';
+import 'kelivo_streaming_content_notifier.dart';
 
 class AgentTaskSnapshot {
   const AgentTaskSnapshot({
@@ -17,24 +18,30 @@ class AgentTaskSnapshot {
     required this.streamingText,
     required this.progress,
     required this.conversation,
+    required this.activeMessageId,
   });
 
   final bool running;
   final String streamingText;
   final List<AgentProgressEvent> progress;
   final AgentConversation conversation;
+  final String? activeMessageId;
 
   AgentTaskSnapshot copyWith({
     bool? running,
     String? streamingText,
     List<AgentProgressEvent>? progress,
     AgentConversation? conversation,
+    String? activeMessageId,
+    bool clearActiveMessageId = false,
   }) {
     return AgentTaskSnapshot(
       running: running ?? this.running,
       streamingText: streamingText ?? this.streamingText,
       progress: progress ?? this.progress,
       conversation: conversation ?? this.conversation,
+      activeMessageId:
+          clearActiveMessageId ? null : (activeMessageId ?? this.activeMessageId),
     );
   }
 }
@@ -46,6 +53,8 @@ class AgentTaskCoordinator {
 
   final AgentSessionStore _sessions = AgentSessionStore();
   final Map<String, ValueNotifier<AgentTaskSnapshot>> _tasks = {};
+  final KelivoStreamingContentNotifier streaming =
+      KelivoStreamingContentNotifier();
 
   ValueListenable<AgentTaskSnapshot>? listenable(String conversationId) =>
       _tasks[conversationId];
@@ -55,6 +64,7 @@ class AgentTaskCoordinator {
 
   ValueNotifier<AgentTaskSnapshot> launch({
     required AgentConversation conversation,
+    required String assistantMessageId,
     required List<AgentMessage> history,
     required String prompt,
     required List<String> imageDataUris,
@@ -69,6 +79,8 @@ class AgentTaskCoordinator {
     final existing = _tasks[conversation.id];
     if (existing != null && existing.value.running) return existing;
 
+    streaming.markStarted(assistantMessageId);
+
     final notifier = existing ??
         ValueNotifier<AgentTaskSnapshot>(
           AgentTaskSnapshot(
@@ -76,6 +88,7 @@ class AgentTaskCoordinator {
             streamingText: '',
             progress: const [],
             conversation: conversation,
+            activeMessageId: assistantMessageId,
           ),
         );
 
@@ -84,6 +97,7 @@ class AgentTaskCoordinator {
       streamingText: '',
       progress: const [],
       conversation: conversation,
+      activeMessageId: assistantMessageId,
     );
     _tasks[conversation.id] = notifier;
 
@@ -91,6 +105,7 @@ class AgentTaskCoordinator {
       _run(
         notifier: notifier,
         conversation: conversation,
+        assistantMessageId: assistantMessageId,
         history: history,
         prompt: prompt,
         imageDataUris: imageDataUris,
@@ -110,6 +125,7 @@ class AgentTaskCoordinator {
   Future<void> _run({
     required ValueNotifier<AgentTaskSnapshot> notifier,
     required AgentConversation conversation,
+    required String assistantMessageId,
     required List<AgentMessage> history,
     required String prompt,
     required List<String> imageDataUris,
@@ -132,8 +148,7 @@ class AgentTaskCoordinator {
             : conversation.title,
       );
     } catch (_) {
-      // The agent can still run if the Android keep-alive bridge is
-      // unavailable, for example in tests or desktop tooling.
+      // Foreground-only hosts and tests can still run without Android bridge.
     }
 
     try {
@@ -151,30 +166,14 @@ class AgentTaskCoordinator {
         roleOverride: roleOverride,
         onTextDelta: (delta) {
           if (delta.isEmpty) return;
-          final current = notifier.value;
-          notifier.value = current.copyWith(
-            streamingText: current.streamingText + delta,
-          );
+          streaming.appendContent(assistantMessageId, delta);
         },
         onProgress: (event) {
-          final current = notifier.value;
-          final progress = List<AgentProgressEvent>.from(current.progress);
-          final duplicate = progress.isNotEmpty &&
-              progress.last.label == event.label &&
-              progress.last.detail == event.detail;
-          final compact = event.kind == 'retry' || event.kind == 'fallback';
-          final lastCompact = progress.isNotEmpty &&
-              (progress.last.kind == 'retry' ||
-                  progress.last.kind == 'fallback');
-
-          if (compact && lastCompact) {
-            progress[progress.length - 1] = event;
-          } else if (!duplicate) {
-            progress.add(event);
-            if (progress.length > 8) progress.removeAt(0);
+          streaming.updateProgress(assistantMessageId, event);
+          if (event.kind == 'model' && event.detail.trim().isNotEmpty) {
+            streaming.updateModel(assistantMessageId, event.detail.trim());
           }
 
-          notifier.value = current.copyWith(progress: progress);
           unawaited(
             BackgroundAgentRuntime.update(
               taskId: taskId,
@@ -192,12 +191,15 @@ class AgentTaskCoordinator {
           ) ??
           conversation;
 
-      final messages = List<AgentMessage>.from(latest.messages);
-      if (result.text.trim().isNotEmpty) {
-        messages.add(
-          AgentMessage(role: 'assistant', content: result.text),
-        );
-      }
+      final messages = _replaceMessage(
+        latest.messages,
+        assistantMessageId,
+        AgentMessage(
+          id: assistantMessageId,
+          role: 'assistant',
+          content: result.text.trim(),
+        ),
+      );
 
       final used = result.branchUsed?.trim();
       final updated = latest.copyWith(
@@ -224,20 +226,26 @@ class AgentTaskCoordinator {
         streamingText: '',
         progress: const [],
         conversation: updated,
+        activeMessageId: null,
       );
+      streaming.removeNotifier(assistantMessageId);
     } catch (error) {
       final latest = await _sessions.loadById(
             conversation.repoFullName,
             conversation.id,
           ) ??
           conversation;
-      final messages = List<AgentMessage>.from(latest.messages)
-        ..add(
-          AgentMessage(
-            role: 'error',
-            content: _friendlyError(error),
-          ),
-        );
+
+      final messages = _replaceMessage(
+        latest.messages,
+        assistantMessageId,
+        AgentMessage(
+          id: assistantMessageId,
+          role: 'error',
+          content: _friendlyError(error),
+        ),
+      );
+
       final updated = latest.copyWith(
         messages: messages,
         updatedAt: DateTime.now(),
@@ -248,12 +256,29 @@ class AgentTaskCoordinator {
         streamingText: '',
         progress: const [],
         conversation: updated,
+        activeMessageId: null,
       );
+      streaming.removeNotifier(assistantMessageId);
     } finally {
       try {
         await BackgroundAgentRuntime.stop(taskId: taskId);
       } catch (_) {}
     }
+  }
+
+  List<AgentMessage> _replaceMessage(
+    List<AgentMessage> source,
+    String id,
+    AgentMessage replacement,
+  ) {
+    final next = List<AgentMessage>.from(source);
+    final index = next.indexWhere((message) => message.id == id);
+    if (index == -1) {
+      next.add(replacement);
+    } else {
+      next[index] = replacement;
+    }
+    return next;
   }
 
   String _friendlyError(Object error) {
