@@ -1024,6 +1024,7 @@ class _AgentSheetState extends State<AgentSheet> {
         );
       });
       await _persistSession();
+      if (!mounted) return;
       _scrollToLatest();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pull request created')),
