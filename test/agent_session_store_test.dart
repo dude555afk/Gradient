@@ -9,9 +9,9 @@ void main() {
       id: 'chat-1',
       repoFullName: 'owner/repo',
       title: 'Fix workflow',
-      messages: [
-        AgentMessage.create(role: 'user', content: 'Fix it'),
-        AgentMessage.create(role: 'assistant', content: 'Working on it'),
+      messages: const [
+        AgentMessage(id: 'msg-1', role: 'user', content: 'Fix it'),
+        AgentMessage(id: 'msg-2', role: 'assistant', content: 'Working on it'),
       ],
       changes: const [
         PendingFileChange(
@@ -35,8 +35,8 @@ void main() {
         AgentCheckpoint(
           id: 'cp-1',
           label: 'Before edit',
-          messages: [
-            AgentMessage.create(role: 'user', content: 'Fix it'),
+          messages: const [
+            AgentMessage(id: 'msg-3', role: 'user', content: 'Fix it'),
           ],
           changes: const [],
           pullRequests: const [],
