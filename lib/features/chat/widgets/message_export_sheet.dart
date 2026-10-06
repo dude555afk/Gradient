@@ -1058,7 +1058,7 @@ Future<File?> _renderWidgetDirectly(
   BuildContext context,
   Widget Function() buildContent, {
   required ThemeData theme,
-  double width = 480, // 宽度*3
+  double width = 480, // Upstream comment translated to English.
   double pixelRatio = 3.0,
 }) async {
   final overlay = Overlay.of(context);

@@ -64,8 +64,8 @@ abstract final class SherpaModelCatalog {
     ),
     SherpaModelDefinition(
       id: 'sense-voice-multilingual-int8-2025-09-09',
-      name: 'SenseVoice int8 多语模型',
-      description: '支持中文、英文、粤语、日语和韩语，下载约 166 MB',
+      name: 'SenseVoice int8 multilingual model',
+      description: 'Supports Mandarin, English, Cantonese, Japanese and Korean, approximately 166 MB',
       architecture: SherpaModelArchitecture.senseVoice,
       archiveUri: Uri.parse(
         'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'
@@ -78,8 +78,8 @@ abstract final class SherpaModelCatalog {
     ),
     SherpaModelDefinition(
       id: 'zipformer-zh-en-mobile-2023-02-20',
-      name: 'Zipformer 中英 Mobile',
-      description: '中英双语流式识别，下载约 347 MB',
+      name: 'Zipformer Chinese-English Mobile',
+      description: 'Chinese-English streaming recognition, approximately 347 MB',
       architecture: SherpaModelArchitecture.streamingZipformer,
       archiveUri: Uri.parse(
         'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'
@@ -308,7 +308,7 @@ final class SherpaModelManager {
       return SherpaModelInstallStatus(
         model: model,
         state: SherpaModelInstallState.failed,
-        error: _failures[modelId] ?? '模型文件不完整，请重新下载',
+        error: _failures[modelId] ?? 'Model files are incomplete. Please download them again.',
       );
     }
     final failure = _failures[modelId];

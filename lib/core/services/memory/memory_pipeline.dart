@@ -188,8 +188,8 @@ class MemoryPipelineService {
     List<ChatMessage> window,
     MemoryPromptLang lang,
   ) {
-    final userPrefix = lang == MemoryPromptLang.zh ? '用户：' : 'User: ';
-    final assistantPrefix = lang == MemoryPromptLang.zh ? '助手：' : 'Assistant: ';
+    final userPrefix = lang == MemoryPromptLang.'User: ';
+    final assistantPrefix = lang == MemoryPromptLang.'Assistant: ';
     final lines = <String>[];
     for (final m in window) {
       String prefix;

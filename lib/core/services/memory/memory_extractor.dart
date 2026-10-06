@@ -92,9 +92,7 @@ abstract final class MemoryExtractor {
         writeScope == MemoryWriteScope.toolDefaultAssistant;
     if (toolDefault) {
       final rule = MemoryPrompts.extractToolDefaultScopeRuleFor(lang);
-      final marker = lang == MemoryPromptLang.zh
-          ? '## 已有记忆'
-          : '## Existing memory';
+      final marker = lang == MemoryPromptLang.'## Existing memory';
       if (template.contains(marker)) {
         template = template.replaceFirst(marker, '$rule\n\n$marker');
       } else {

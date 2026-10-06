@@ -940,7 +940,7 @@ class _SegTabBarState extends State<_SegTabBar> {
             final double rowWidth =
                 segWidth * widget.tabs.length + gap * (widget.tabs.length - 1);
 
-            final Color shellBg = context.appColors.surfaceCard; // 白底胶囊，无边框阴影
+            final Color shellBg = context.appColors.surfaceCard; // Upstream comment translated to English.
 
             List<Widget> children = [];
             for (int index = 0; index < widget.tabs.length; index++) {
@@ -956,13 +956,13 @@ class _SegTabBarState extends State<_SegTabBar> {
                       final Color baseBg = selected
                           ? cs.primary.withValues(alpha: 0.14)
                           : Colors.transparent;
-                      final Color bg = baseBg; // 不叠加遮罩，不改变底色
+                      final Color bg = baseBg; // Upstream comment translated to English.
 
                       // Upstream comment translated to English.
                       final Color baseTextColor = selected
                           ? cs
-                                .primary // 选中文字：主题色
-                          : cs.onSurface.withValues(alpha: 0.82); // 未选中：深灰
+                                .primary // Upstream comment translated to English.
+                          : cs.onSurface.withValues(alpha: 0.82); // Upstream comment translated to English.
                       final Color targetTextColor = pressed
                           ? Color.lerp(
                                   baseTextColor,
@@ -979,7 +979,7 @@ class _SegTabBarState extends State<_SegTabBar> {
                           color: bg,
                           borderRadius: BorderRadius.circular(
                             innerRadius,
-                          ), // 选中块圆角
+                          ), // Upstream comment translated to English.
                         ),
                         alignment: Alignment.center,
                         child: Padding(

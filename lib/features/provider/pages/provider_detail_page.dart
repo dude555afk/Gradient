@@ -145,7 +145,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         'DeepSeek',
         'Tensdaq',
         'AIhubmix',
-        '随想AI中转站',
+        'Suixiang AI Relay',
         'MaruCode',
         'Aliyun',
         'Zhipu AI',
@@ -885,7 +885,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 const SizedBox(height: 6),
                 Text.rich(
                   TextSpan(
-                    text: '官网：',
+                    text: 'Website:',
                     style: TextStyle(
                       color: cs.onSurface.withValues(alpha: 0.8),
                     ),
@@ -940,7 +940,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 const SizedBox(height: 6),
                 Text.rich(
                   TextSpan(
-                    text: '官网：',
+                    text: 'Website:',
                     style: TextStyle(
                       color: cs.onSurface.withValues(alpha: 0.8),
                     ),
@@ -975,7 +975,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           ),
           const SizedBox(height: 12),
         ],
-        if (widget.keyName.toLowerCase() == '随想ai中转站') ...[
+        if (widget.keyName.toLowerCase() == 'suixiang ai relay') ...[
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -987,13 +987,13 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '可靠高效的 API 中继服务，提供 Claude、Codex、Gemini 等中继服务。注重隐私·无数据倒卖·无模型掺水，充值额度 1:1，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。',
+                  '可靠高效的 API 中继服务，提供 Claude、Codex、Gemini 等中继服务。注重隐私·无数据倒卖·无模型掺水，充值quota 1:1，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。',
                   style: TextStyle(color: cs.onSurface.withValues(alpha: 0.8)),
                 ),
                 const SizedBox(height: 6),
                 Text.rich(
                   TextSpan(
-                    text: '官网：',
+                    text: 'Website:',
                     style: TextStyle(
                       color: cs.onSurface.withValues(alpha: 0.8),
                     ),
@@ -1046,7 +1046,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 const SizedBox(height: 6),
                 Text.rich(
                   TextSpan(
-                    text: '官网：',
+                    text: 'Website:',
                     style: TextStyle(
                       color: cs.onSurface.withValues(alpha: 0.8),
                     ),

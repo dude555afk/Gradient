@@ -302,7 +302,7 @@ CREATE INDEX idx_conversations_assistant ON conversation_rows(assistant_id);
         final id = 'm-${index.toString().padLeft(7, '0')}';
         final text = bilingual
             ? (index.isEven
-                  ? '中文搜索 基准消息 $index 固定种子 $seed'
+ ? 'Search benchmark message $index English $seed'
                   : 'English search benchmark message $index seed $seed')
             : 'Benchmark message $index seed $seed';
         final ts = seed + index;
@@ -370,10 +370,10 @@ CREATE INDEX idx_conversations_assistant ON conversation_rows(assistant_id);
     _insertConversation(database, 'd4', 'Long streaming Markdown');
     final targetBytes = smoke ? 32 << 10 : 1 << 20;
     const block =
-        '''# Streaming\n```dart\nvoid main() {}\n```\n|列|value|\n|-|-|\n|中文|English|\n```mermaid\ngraph TD; A-->B;\n```\n![stream](/fixture/images/stream.png)\n''';
+        '''# Streaming\n```dart\nvoid main() {}\n```\n|column|value|\n|-|-|\n|language|English|\n```mermaid\ngraph TD; A-->B;\n```\n![stream](/fixture/images/stream.png)\n''';
     final buffer = StringBuffer(block);
     while (buffer.length < targetBytes) {
-      buffer.writeln('Streaming plain text 中文 English seed=$seed.');
+      buffer.writeln('Streaming plain text English seed=$seed.');
     }
     _insertMessage(
       database,
@@ -419,10 +419,10 @@ CREATE INDEX idx_conversations_assistant ON conversation_rows(assistant_id);
       fileNames.add('attachment_$index.bin');
     }
     final content = StringBuffer('# Renderer fixture\n');
-    content.writeln('|index|中文|value|');
+    content.writeln('|index|text|value|');
     content.writeln('|-:|:-|:-|');
     for (var index = 0; index < tableRows; index++) {
-      content.writeln('|$index|行|value-$index|');
+      content.writeln('|$index|row|value-$index|');
     }
     content.writeln('```dart');
     for (var index = 0; index < codeRows; index++) {
@@ -679,7 +679,7 @@ final class ChatDatabaseV2BenchmarkMetrics {
               () => database.select(
                 "SELECT revision_id FROM message_part_rows "
                 "WHERE kind = 'text' AND payload LIKE ? LIMIT 50;",
-                ['%搜索%'],
+                ['%search%'],
               ),
             ),
           );
@@ -688,7 +688,7 @@ final class ChatDatabaseV2BenchmarkMetrics {
               () => database.select(
                 "SELECT revision_id FROM message_part_rows "
                 "WHERE kind = 'text' AND payload LIKE ? LIMIT 50;",
-                ['%中文搜索%'],
+                ['%english search%'],
               ),
             ),
           );

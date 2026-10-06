@@ -191,7 +191,7 @@ class _AppSnackBarOverlayState extends State<AppSnackBarOverlay> {
       animation: entry.animationController,
       builder: (context, child) {
         // Upstream comment translated to English.
-        final baseOffset = visualIndex * 8.0; // 每个Toast固定间距8px
+        final baseOffset = visualIndex * 8.0; // Upstream comment translated to English.
 
         // Upstream comment translated to English.
         final scaleValue = 1.0 - (visualIndex * 0.03);

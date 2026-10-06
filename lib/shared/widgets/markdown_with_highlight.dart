@@ -1139,7 +1139,7 @@ String _displayLanguage(BuildContext context, String? raw) {
   final zh = _isZh(context);
   final t = raw?.trim();
   if (t != null && t.isNotEmpty) return t;
-  return zh ? '代码' : 'Code';
+  return zh ? 'Code' : 'Code';
 }
 
 bool _isZh(BuildContext context) =>

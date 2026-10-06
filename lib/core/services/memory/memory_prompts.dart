@@ -13,7 +13,7 @@ abstract final class MemoryPrompts {
       '''
 ## 长期记忆
 
-对话中可能出现由系统提供的记忆信息，它们不是用户本轮说的话：
+对话中可能出现由System提供的记忆信息，它们不是用户本轮说的话：
 
 - <user_profile> 是用户的稳定身份信息，例如希望你怎么称呼他、语言偏好、时区。
 - <user_memory type="..."> 是分四类的长期记忆。每行形如 `- [2026-08-07] 内容`，方括号里是这条记忆最后更新的日期。带 `(assistant) ` 前缀的条目只属于当前助手，其余对所有助手可见。
@@ -27,7 +27,7 @@ abstract final class MemoryPrompts {
 
 不要写入：本次对话内的临时上下文、你自己推断而用户没有确认的结论、用户只是随口提到的话题、可以直接从对话记录里查到的事实。
 
-写入时用完整的第三人称陈述句描述用户，不要使用「这个」「刚才」等指回本次对话的词。系统会自动去重合并，不需要先读取再全文替换。
+写入时用完整的第三人称陈述句描述用户，不要使用「这个」「刚才」等指回本次对话的词。System会自动去重合并，不需要先读取再全文替换。
 
 用户明确指出某条记忆不对时，用 memory_edit 修改，或用 memory_delete 归档。
 '''
@@ -171,7 +171,7 @@ Output format (follow this XML exactly, no extra text):
 规则：
 - 只从用户说的话里提取
 - 不提取助手的角色设定
-- 不提取可以直接从对话记录或代码里查到的事实
+- 不提取可以直接从对话记录或Code里查到的事实
 - 每条一句话，独立自包含，用第三人称描述用户
 - 不使用「这个」「刚才」等指回本次对话的词
 - 「已有记忆」里已经出现过的信息不要重复提取
@@ -383,7 +383,7 @@ Output JSON only, no explanation:
 
   static final String migrateZh =
       '''
-你正在把旧版长期记忆迁入带类型的记忆系统。
+你正在把旧版长期记忆迁入带类型的记忆System。
 
 对每一条输入，返回一条 id 相同的输出。保留全部事实、偏好、否定、限定和不确定表述。保持原文语言。只做让记忆简洁、自包含、脱离对话上下文也能看懂的改写。适合时用第三人称描述用户。
 
@@ -427,7 +427,7 @@ Input:
 
   static final String migratePreserveZh =
       '''
-你正在把旧版长期记忆分类到带类型的记忆系统。内容由系统原样保留，你只负责分类。
+你正在把旧版长期记忆分类到带类型的记忆System。内容由System原样保留，你只负责分类。
 
 对每一条输入，返回一条 id 相同的输出。只选一个类型：
 - identity：稳定事实、偏好、背景、人际关系、兴趣或个人上下文
@@ -467,12 +467,12 @@ Input:
 
   // ── §7.5 injection intros ────────────────────────────────────────────────
 
-  static const String introFullZh = '以下内容由系统提供，不是用户本轮发送的内容。';
+  static const String introFullZh = '以下内容由System提供，不是用户本轮发送的内容。';
   static const String introFullEn =
       'The following context is provided by the system. It is not what the user said in this turn.';
   // No longer written: injection always emits a full snapshot. Kept so
   // prompts frozen by earlier versions can still be parsed and stripped.
-  static const String introUpdateZh = '以下是本次对话开始后发生的记忆更新，由系统提供。';
+  static const String introUpdateZh = '以下是本次对话开始后发生的记忆更新，由System提供。';
   static const String introUpdateEn =
       'The following memory changes happened after this conversation started, provided by the system.';
 

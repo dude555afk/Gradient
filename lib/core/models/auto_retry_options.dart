@@ -67,32 +67,32 @@ class AutoRetryOptions {
   };
 
   static const List<String> defaultRetryKeywords = [
-    '并发',
-    '稍后',
-    '重试',
-    '访问量过大',
-    '繁忙',
-    '限流',
+    'concurrency',
+    'later',
+    'retry',
+    'too many requests',
+    'busy',
+    'rate limit',
     'rate limit',
     'too many requests',
     'overloaded',
     'try again',
     'timeout',
-    '超时',
+    'timeout',
   ];
 
   static const List<String> defaultStopKeywords = [
-    '余额',
-    '不足',
-    '额度',
-    '欠费',
+    'balance',
+    'insufficient',
+    'quota',
+    'billing',
     'balance',
     'insufficient',
     'quota',
     'invalid api key',
     'unauthorized',
     'permission',
-    '未实名',
+    'verification required',
   ];
 
   /// When false, the first attempt is never retried.

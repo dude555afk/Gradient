@@ -169,7 +169,7 @@ class _LogViewerPageState extends State<LogViewerPage>
 
     String appTabLabel() {
       if (locale.languageCode.toLowerCase() == 'zh') {
-        return l10n.flutterLogSettingTitle.replaceAll(RegExp(r'(打印|列印)$'), '');
+        return l10n.flutterLogSettingTitle.replaceAll(RegExp(r'(Print)$'), '');
       }
       return l10n.storageSpaceSubLogsFlutter;
     }

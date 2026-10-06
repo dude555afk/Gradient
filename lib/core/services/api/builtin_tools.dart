@@ -263,7 +263,7 @@ abstract class BuiltInToolsHelper {
         providerId.contains('kimi') ||
         providerName.contains('moonshot') ||
         providerName.contains('kimi') ||
-        providerName.contains('月之暗面');
+        providerName.contains('moonshot');
   }
 
   static bool isZhipuProvider(ProviderConfig? cfg) {
@@ -275,9 +275,9 @@ abstract class BuiltInToolsHelper {
         host.contains('bigmodel') ||
         host == 'api.z.ai' ||
         providerId.contains('zhipu') ||
-        providerId.contains('智谱') ||
+        providerId.contains('zhipu') ||
         providerName.contains('zhipu') ||
-        providerName.contains('智谱');
+        providerName.contains('zhipu');
   }
 
   static bool supportsBuiltInSearchForModel({

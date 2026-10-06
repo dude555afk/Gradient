@@ -501,7 +501,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     _p('Tensdaq', 'Tensdaq', enabled: false, models: 0),
     _p('DeepSeek', 'DeepSeek', enabled: false, models: 0),
     _p('AIhubmix', 'AIhubmix', enabled: false, models: 0),
-    _p('随想AI中转站', '随想AI中转站', enabled: false, models: 0),
+    _p('Suixiang AI Relay', 'Suixiang AI Relay', enabled: false, models: 0),
     _p('MaruCode', 'MaruCode', enabled: false, models: 0),
     _p(l10n.providersPageAliyunName, 'Aliyun', enabled: false, models: 0),
     _p(l10n.providersPageZhipuName, 'Zhipu AI', enabled: false, models: 0),

@@ -88,7 +88,7 @@ class SettingsProvider extends ChangeNotifier {
     'Tensdaq',
     'DeepSeek',
     'AIhubmix',
-    '随想AI中转站',
+    'Suixiang AI Relay',
     'MaruCode',
     'Aliyun',
     'Zhipu AI',
@@ -6425,7 +6425,7 @@ class ProviderConfig {
     if (k.contains('openrouter')) return 'https://openrouter.ai/api/v1';
     if (k.contains('vercel')) return 'https://ai-gateway.vercel.sh/v1';
     if (k.contains('aihubmix')) return 'https://aihubmix.com/v1';
-    if (k.contains('随想')) return 'https://sui-xiang.com/v1';
+    if (k.contains('suixiang')) return 'https://sui-xiang.com/v1';
     if (k.contains('marucode') || k.contains('muteki')) {
       return 'https://api.muteki.site/v1';
     }
@@ -6435,7 +6435,7 @@ class ProviderConfig {
     if (RegExp(r'bytedance|doubao|volces|ark').hasMatch(k)) {
       return 'https://ark.cn-beijing.volces.com/api/v3';
     }
-    if (RegExp(r'kimi|moonshot|月之暗面').hasMatch(k)) {
+    if (RegExp(r'kimi|moonshot|moonshot').hasMatch(k)) {
       return 'https://api.moonshot.cn/v1';
     }
     if (k.contains('silicon')) return 'https://api.siliconflow.cn/v1';
@@ -6443,7 +6443,7 @@ class ProviderConfig {
       return 'https://api.x.ai/v1';
     }
     if (k.contains('deepseek')) return 'https://api.deepseek.com/v1';
-    if (RegExp(r'zhipu|智谱|glm').hasMatch(k)) {
+    if (RegExp(r'zhipu|zhipu|glm').hasMatch(k)) {
       return 'https://open.bigmodel.cn/api/paas/v4';
     }
     if (k.contains('gemini') || k.contains('google')) {
@@ -6651,7 +6651,7 @@ class ProviderConfig {
     if (k.contains('deepseek')) return '/user/balance';
     if (k.contains('openrouter')) return '/credits';
     if (k.contains('vercel')) return '/credits';
-    if (RegExp(r'kimi|moonshot|月之暗面').hasMatch(k)) {
+    if (RegExp(r'kimi|moonshot|moonshot').hasMatch(k)) {
       return '/users/me/balance';
     }
     return '/credits';
@@ -6665,7 +6665,7 @@ class ProviderConfig {
       return 'data.total_credits - data.total_usage';
     }
     if (k.contains('vercel')) return 'balance';
-    if (RegExp(r'kimi|moonshot|月之暗面').hasMatch(k)) {
+    if (RegExp(r'kimi|moonshot|moonshot').hasMatch(k)) {
       return 'data.available_balance';
     }
     return 'data.total_usage';

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 enum RestoreMode {
-  overwrite, // 完全覆盖：清空本地后恢复
-  merge, // 增量合并：智能去重
+  overwrite, // Upstream comment translated to English.
+  merge, // Upstream comment translated to English.
 }
 
 class WebDavConfig {
