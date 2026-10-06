@@ -970,24 +970,51 @@ class _AgentSheetState extends State<AgentSheet> {
 
   Future<void> _createPr(PendingPullRequest proposal) async {
     if (_busy || _applying) return;
+
     final token = await _settings.githubToken();
-    if (token.isEmpty) return;
+    if (token.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Connect GitHub before creating a pull request.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _applying = true);
     final gh = GhBackend(token: token);
 
     try {
-      final head = _taskBranch?.trim().isNotEmpty == true
-          ? _taskBranch!.trim()
-          : proposal.head;
+      final head = await _ensureTaskBranch(gh);
+
+      if (_changes.isNotEmpty) {
+        final files = <String, String>{
+          for (final change in _changes) change.path: change.newContent,
+        };
+        await gh.writeFilesBatch(
+          fullName: widget.workspace.fullName,
+          branch: head,
+          files: files,
+          message: _changes.length == 1
+              ? _changes.first.message
+              : 'Gradient: apply ${files.length} proposed changes',
+        );
+      }
 
       final url = await gh.createPullRequest(
         fullName: widget.workspace.fullName,
         title: proposal.title,
         body: proposal.body,
         head: head,
-        base: proposal.base,
+        base: proposal.base.trim().isEmpty
+            ? widget.workspace.defaultBranch
+            : proposal.base,
       );
+
       if (!mounted) return;
       setState(() {
+        _changes.clear();
         _pullRequests.remove(proposal);
         _messages.add(
           AgentMessage.create(
@@ -998,11 +1025,16 @@ class _AgentSheetState extends State<AgentSheet> {
       });
       await _persistSession();
       _scrollToLatest();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pull request created')),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
+        SnackBar(content: Text('Could not create PR: $error')),
       );
+    } finally {
+      if (mounted) setState(() => _applying = false);
     }
   }
 
@@ -1025,8 +1057,12 @@ class _AgentSheetState extends State<AgentSheet> {
     final keyboard = media.viewInsets.bottom;
     final usableHeight = media.size.height - keyboard;
     final sheetHeight = usableHeight * (keyboard > 0 ? .98 : .9);
+    final amoled = gradientAmoledMode.value &&
+        Theme.of(context).brightness == Brightness.dark;
 
-    return AnimatedPadding(
+    return ColoredBox(
+      color: amoled ? Colors.black : cs.surface,
+      child: AnimatedPadding(
       duration: const Duration(milliseconds: 160),
       curve: Curves.easeOutCubic,
       padding: EdgeInsets.only(bottom: keyboard),
@@ -1421,6 +1457,7 @@ class _AgentSheetState extends State<AgentSheet> {
                 ),
         ),
       ),
+    ),
     );
   }
 }
