@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -47,7 +48,6 @@ class _AgentSheetState extends State<AgentSheet> {
 
   AgentConversation? _conversation;
   String? _taskBranch;
-  String _streamingText = '';
   final _streamingNotifier = ValueNotifier<String>('');
   ValueListenable<AgentTaskSnapshot>? _taskListenable;
   VoidCallback? _taskListener;
@@ -90,7 +90,6 @@ class _AgentSheetState extends State<AgentSheet> {
       _taskBranch = conversation.taskBranch;
       _progress.clear();
       _pendingImages.clear();
-      _streamingText = '';
       _streamingNotifier.value = '';
       _loadingSession = false;
     });
@@ -118,8 +117,7 @@ class _AgentSheetState extends State<AgentSheet> {
         setState(() {
           _busy = false;
           _progress.clear();
-          _streamingText = '';
-          _streamingNotifier.value = '';
+              _streamingNotifier.value = '';
         });
       }
       return;
@@ -130,7 +128,6 @@ class _AgentSheetState extends State<AgentSheet> {
       final snapshot = listenable.value;
       setState(() {
         _busy = snapshot.running;
-        _streamingText = snapshot.streamingText;
         _streamingNotifier.value = snapshot.streamingText;
         _progress
           ..clear()
@@ -806,7 +803,6 @@ class _AgentSheetState extends State<AgentSheet> {
 
     setState(() {
       _busy = true;
-      _streamingText = '';
       _streamingNotifier.value = '';
       _progress.clear();
       _messages.add(
