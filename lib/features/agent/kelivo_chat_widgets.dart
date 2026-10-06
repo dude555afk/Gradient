@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -496,31 +498,43 @@ class KelivoChatComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final amoled = gradientAmoledMode.value &&
-        Theme.of(context).brightness == Brightness.dark;
-    final composerColor =
-        amoled ? const Color(0xFF111113) : cs.surfaceContainerLow;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final amoled = gradientAmoledMode.value && isDark;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-      child: Material(
-        color: composerColor,
-        surfaceTintColor: Colors.transparent,
-        elevation: 12,
-        shadowColor: Colors.black.withValues(alpha: .50),
-        borderRadius: BorderRadius.circular(26),
-        clipBehavior: Clip.antiAlias,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-              color: amoled
-                  ? Colors.white.withValues(alpha: .10)
-                  : cs.outlineVariant.withValues(alpha: .22),
-            ),
-          ),
-          child: Padding(
+    // Kelivo-style composer: a translucent blurred surface, not a Material
+    // card with elevation. The chat behind it remains visible, which is what
+    // makes the input actually feel detached/floating.
+    final base = amoled ? Colors.black : cs.surface;
+    final overlay = cs.onSurface.withValues(alpha: isDark ? .07 : .02);
+    final composerColor = Color.alphaBlend(
+      overlay,
+      base.withValues(alpha: isDark ? .78 : .90),
+    );
+
+    return SafeArea(
+      top: false,
+      left: false,
+      right: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              decoration: BoxDecoration(
+                color: composerColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isDark
+                      ? cs.onSurface.withValues(alpha: .10)
+                      : cs.outline.withValues(alpha: .20),
+                  width: 1,
+                ),
+              ),
+              child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 5, 7, 7),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -604,6 +618,9 @@ class KelivoChatComposer extends StatelessWidget {
             ],
           ),
         ),
+              ),
+            ),
+          ),
         ),
       ),
     );
