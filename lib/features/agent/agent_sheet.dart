@@ -638,8 +638,10 @@ class _AgentSheetState extends State<AgentSheet> {
     _scrollToLatest();
   }
 
-  Future<void> _messageAction(int index, String action) async {
-    if (_busy || index < 0 || index >= _messages.length) return;
+  Future<void> _messageAction(String messageId, String action) async {
+    if (_busy) return;
+    final index = _messages.indexWhere((message) => message.id == messageId);
+    if (index < 0) return;
     final message = _messages[index];
 
     if (action == 'edit' && message.role == 'user') {
@@ -1225,19 +1227,19 @@ class _AgentSheetState extends State<AgentSheet> {
                                 ],
                               ),
                             ),
-                          for (var i = 0; i < _messages.length; i++)
+                          for (final message in _messages)
                             KelivoChatMessage(
-                              message: _messages[i],
+                              key: ValueKey(message.id),
+                              message: message,
+                              streamingListenable:
+                                  _taskCoordinator.streaming.hasNotifier(
+                                message.id,
+                              )
+                                      ? _taskCoordinator.streaming
+                                          .getNotifier(message.id)
+                                      : null,
                               onAction: (action) =>
-                                  _messageAction(i, action),
-                            ),
-                          if (_busy && _progress.isNotEmpty)
-                            KelivoProgressTimeline(events: _progress),
-                          if (_busy)
-                            ValueListenableBuilder<String>(
-                              valueListenable: _streamingNotifier,
-                              builder: (context, text, _) =>
-                                  KelivoStreamingMessage(text: text),
+                                  _messageAction(message.id, action),
                             ),
                           if (_changes.length > 1)
                             Card(
