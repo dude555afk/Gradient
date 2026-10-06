@@ -823,137 +823,31 @@ class _AgentSheetState extends State<AgentSheet> {
     await _persistSession();
     _scrollToLatest();
 
-    final backgroundTaskId =
-        '${_conversation?.id ?? DateTime.now().microsecondsSinceEpoch}:run';
-    try {
-      await BackgroundAgentRuntime.start(
-        taskId: backgroundTaskId,
-        conversationId: _conversation?.id ?? '',
-        title: _conversation?.title == 'New chat'
-            ? widget.workspace.fullName
-            : (_conversation?.title ?? widget.workspace.fullName),
-      );
-    } catch (_) {
-      // The task still works in foreground if the native keep-alive is
-      // unavailable on a non-Android host or an older build.
-    }
-
-    try {
-      final result = await AgentService(
-        settings: settings,
-        apiKey: apiKey,
-        githubToken: githubToken,
-        workspace: widget.workspace,
-        webEnabled: _webEnabled,
-        pageContext: widget.contextText,
-      ).run(
-        prompt: prompt,
-        history: history,
-        imageDataUris: imageDataUris,
-        roleOverride: _roleOverride,
-        onTextDelta: (delta) {
-          if (!mounted || delta.isEmpty) return;
-          _streamingText += delta;
-          _streamingNotifier.value = _streamingText;
-          _scrollToLatest();
-        },
-        onProgress: (event) {
-          if (!mounted) return;
-          setState(() {
-            final duplicate = _progress.isNotEmpty &&
-                _progress.last.label == event.label &&
-                _progress.last.detail == event.detail;
-
-            final compactStatus =
-                event.kind == 'retry' || event.kind == 'fallback';
-            final lastIsCompact = _progress.isNotEmpty &&
-                (_progress.last.kind == 'retry' ||
-                    _progress.last.kind == 'fallback');
-
-            if (compactStatus && lastIsCompact) {
-              _progress[_progress.length - 1] = event;
-            } else if (!duplicate) {
-              _progress.add(event);
-              if (_progress.length > 8) _progress.removeAt(0);
-            }
-          });
-          unawaited(
-            BackgroundAgentRuntime.update(
-              taskId: backgroundTaskId,
-              detail: event.detail.trim().isEmpty
-                  ? event.label
-                  : '${event.label} • ${event.detail}',
-            ).catchError((_) {}),
-          );
-          _scrollToLatest();
-        },
-      );
-
-      if (!mounted) return;
-      setState(() {
-        if (result.text.trim().isNotEmpty) {
-          _messages.add(
-            AgentMessage(role: 'assistant', content: result.text),
-          );
-        }
-        _changes.addAll(result.fileChanges);
-        _pullRequests.addAll(result.pullRequests);
-
-        final used = result.branchUsed?.trim();
-        if (used != null &&
-            used.isNotEmpty &&
-            used != widget.workspace.branch) {
-          _taskBranch = used;
-        }
-        _streamingText = '';
-        _streamingNotifier.value = '';
-      });
-      await _persistSession();
-      unawaited(_generateSmartTitleIfNeeded(settings, apiKey));
-      _scrollToLatest();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _streamingText = '';
-        _streamingNotifier.value = '';
-        _messages.add(
-          AgentMessage(
-            role: 'error',
-            content: _friendlyError(error),
-          ),
-        );
-      });
-      await _persistSession();
-      _scrollToLatest();
-    } finally {
-      try {
-        await BackgroundAgentRuntime.stop(taskId: backgroundTaskId);
-      } catch (_) {}
+    final current = _conversation;
+    if (current == null) {
       if (mounted) {
-        setState(() {
-          _busy = false;
-          _progress.clear();
-        });
+        setState(() => _busy = false);
       }
-    }
-  }
-
-  String _friendlyError(Object error) {
-    if (error is AiProviderException) {
-      final detail = error.friendlyMessage;
-      if (error.statusCode == 429) {
-        return 'The AI provider is rate-limited right now. Gradient retried automatically, but the provider is still busy.\n\n$detail';
-      }
-      return 'The AI provider could not complete this request.\n\n$detail';
+      return;
     }
 
-    final raw = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (raw.contains('gh failed')) {
-      return 'GitHub could not complete that operation.\n\n'
-          '${raw.length > 260 ? '${raw.substring(0, 260)}…' : raw}';
-    }
-    return 'Gradient could not finish this request.\n\n'
-        '${raw.length > 260 ? '${raw.substring(0, 260)}…' : raw}';
+    final task = _taskCoordinator.launch(
+      conversation: current,
+      history: history,
+      prompt: prompt,
+      imageDataUris: imageDataUris,
+      settings: settings,
+      apiKey: apiKey,
+      githubToken: githubToken,
+      workspace: widget.workspace,
+      webEnabled: _webEnabled,
+      pageContext: widget.contextText,
+      roleOverride: _roleOverride,
+    );
+
+    _taskListenable = task;
+    _attachTask(current.id);
+    unawaited(_generateSmartTitleIfNeeded(settings, apiKey));
   }
 
   Future<String> _ensureTaskBranch(GhBackend gh) async {
@@ -1119,6 +1013,11 @@ class _AgentSheetState extends State<AgentSheet> {
 
   @override
   void dispose() {
+    final listenable = _taskListenable;
+    final listener = _taskListener;
+    if (listenable != null && listener != null) {
+      listenable.removeListener(listener);
+    }
     _controller.dispose();
     _scrollController.dispose();
     _streamingNotifier.dispose();
