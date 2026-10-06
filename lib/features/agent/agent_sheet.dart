@@ -805,7 +805,7 @@ class _AgentSheetState extends State<AgentSheet> {
       _streamingNotifier.value = '';
       _progress.clear();
       _messages.add(
-        AgentMessage(
+        AgentMessage.create(
           role: 'user',
           content: imageCount == 0
               ? prompt
@@ -900,7 +900,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() {
         _changes.remove(change);
         _messages.add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'assistant',
             content: 'Committed **${change.path}** to `$branch` '
                 '(${sha.length > 8 ? sha.substring(0, 8) : sha}).',
@@ -949,7 +949,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() {
         _changes.clear();
         _messages.add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'assistant',
             content: 'Committed **$count files** atomically to `$branch` '
                 '(${sha.length > 8 ? sha.substring(0, 8) : sha}).',
@@ -990,7 +990,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() {
         _pullRequests.remove(proposal);
         _messages.add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'assistant',
             content: 'Pull request created: $url',
           ),
