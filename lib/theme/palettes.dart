@@ -32,7 +32,7 @@ class ThemePalettes {
 
   static const ThemePalette defaultPalette = ThemePalette(
     id: defaultId,
-    zhName: 'Default',
+    zhName: '默认',
     enName: 'Default',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -99,7 +99,7 @@ class ThemePalettes {
   // Blue palette: derived from provided logs
   static const ThemePalette blue = ThemePalette(
     id: blueId,
-    zhName: 'Ocean Blue',
+    zhName: '海霄蓝',
     enName: 'Aether Blue',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -166,7 +166,7 @@ class ThemePalettes {
   // Green palette
   static const ThemePalette green = ThemePalette(
     id: greenId,
-    zhName: 'Bamboo Green',
+    zhName: '竹影绿',
     enName: 'Bamboo Green',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -233,7 +233,7 @@ class ThemePalettes {
   // Purple palette
   static const ThemePalette purple = ThemePalette(
     id: purpleId,
-    zhName: 'Twilight Purple',
+    zhName: '暮紫韵',
     enName: 'Twilight Purple',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -300,7 +300,7 @@ class ThemePalettes {
   // Yellow palette
   static const ThemePalette yellow = ThemePalette(
     id: yellowId,
-    zhName: 'Amber Gold',
+    zhName: '琥珀金',
     enName: 'Amber Gold',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -367,7 +367,7 @@ class ThemePalettes {
   // New: Smoky Rose palette — exact values from logs
   static const ThemePalette smokyRose = ThemePalette(
     id: smokyRoseId,
-    zhName: 'Dusk Rose',
+    zhName: '暮霭玫',
     enName: 'Smoky Rose',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -434,7 +434,7 @@ class ThemePalettes {
   // New: Terracotta Clay palette — exact values from logs
   static const ThemePalette terracotta = ThemePalette(
     id: terracottaId,
-    zhName: 'Terracotta Red',
+    zhName: '陶砂红',
     enName: 'Terracotta Clay',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -500,7 +500,7 @@ class ThemePalettes {
 
   static const ThemePalette monochrome = ThemePalette(
     id: monochromeId,
-    zhName: 'Ink Gray',
+    zhName: '纸墨灰',
     enName: 'Frost Gray',
     light: ColorScheme(
       brightness: Brightness.light,
@@ -567,7 +567,7 @@ class ThemePalettes {
   // New: Document Theme palette based on provided spec
   static const ThemePalette docTheme = ThemePalette(
     id: docThemeId,
-    zhName: 'Cherry Green',
+    zhName: '樱桃绿',
     enName: 'Verdant Mint',
     light: ColorScheme(
       brightness: Brightness.light,

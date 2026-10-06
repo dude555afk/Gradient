@@ -29,7 +29,7 @@ const List<LanguageOption> supportedLanguages = [
   LanguageOption(
     code: 'zh-CN',
     displayName: 'Simplified Chinese',
-    displayNameZh: 'Simplified Chinese',
+    displayNameZh: '简体中文',
     flag: '🇨🇳',
   ),
   LanguageOption(
@@ -41,7 +41,7 @@ const List<LanguageOption> supportedLanguages = [
   LanguageOption(
     code: 'zh-TW',
     displayName: 'Traditional Chinese',
-    displayNameZh: 'Traditional Chinese',
+    displayNameZh: '繁體中文',
     flag: '🇨🇳',
   ),
   LanguageOption(

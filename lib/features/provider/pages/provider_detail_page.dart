@@ -73,7 +73,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   bool _showApiKey = false; // toggle visibility
   bool _multiKeyEnabled = false; // single/multi key mode
 
-  // Upstream comment translated to English.
+  // 模型选择模式相关
   bool _isSelectionMode = false;
   final Set<String> _selectedModels = {};
   bool _isDetecting = false;
@@ -616,8 +616,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     }
   }
 
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
+  // 后台预热 LobeHub 图标缓存（彩色优先，失败回退单色），不阻塞 UI。
+  // 顺序需与 ProviderAvatar._resolveLobehubPath 保持一致，避免缓存键不一致。
   void _prewarmLobehubIcon(String n) {
     if (n.isEmpty) return;
     Future.microtask(() async {
@@ -638,7 +638,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final icons = BrandAssets.selectableIcons;
 
-    // Upstream comment translated to English.
+    // 若当前头像为 LobeHub 自定义图标，预热缓存，使弹窗与详情页头像无需等待下载。
     final current = settings.getProviderConfig(widget.keyName);
     if (current.avatarType == 'lobehub' &&
         (current.avatarValue ?? '').isNotEmpty) {
@@ -1083,7 +1083,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           ),
           const SizedBox(height: 12),
         ],
-        // Upstream comment translated to English.
+        // 顶部管理分组标题（左侧缩进以对齐卡片内容）
         Padding(
           padding: const EdgeInsets.only(left: 12),
           child: Text(
@@ -1523,7 +1523,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               list.insert(newIndex, item);
               setState(() {});
               final settings = context.read<SettingsProvider>();
-              // Upstream comment translated to English.
+              // 使用 Future.microtask 来异步执行，避免阻塞回调
               Future.microtask(() async {
                 final latest = settings.getProviderConfig(
                   widget.keyName,
@@ -3253,7 +3253,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
       defaultName: widget.displayName,
     );
 
-    // Upstream comment translated to English.
+    // 顺序检测,防止并发导致API被封锁
     for (final modelId in modelsToTest) {
       if (mounted) {
         setState(() {

@@ -525,7 +525,7 @@ class SettingsSearchIndex {
       'displaySettingsPageLanguageTitle',
       SettingsSearchDestination.display,
       (l) => l.displaySettingsPageLanguageTitle,
-      keywords: 'language locale chinese english simplified traditional',
+      keywords: 'language locale chinese english 语言 語言 中文 英文 简体 简中 繁体 繁中',
     );
     add(
       'displaySettingsPageAppFontTitle',

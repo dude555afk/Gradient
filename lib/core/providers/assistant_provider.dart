@@ -127,9 +127,9 @@ class AssistantProvider extends ChangeNotifier {
     await loaded;
     if (_assistants.isNotEmpty) return;
     final l10n = AppLocalizations.of(context)!;
-    // Upstream comment translated to English.
+    // 1) 默认助手
     _assistants.add(_defaultAssistant(l10n));
-    // Upstream comment translated to English.
+    // 2) 示例助手（带提示词模板）
     _assistants.add(
       Assistant(
         id: const Uuid().v4(),

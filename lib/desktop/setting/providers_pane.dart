@@ -1000,7 +1000,7 @@ class _DesktopProviderDetailPaneState extends State<DesktopProviderDetailPane> {
   bool _showApiKey = false;
   bool _eyeHover = false;
 
-  // Upstream comment translated to English.
+  // 批量选择模式相关
   bool _isSelectionMode = false;
   final Set<String> _selectedModels = {};
   bool _isDetecting = false;

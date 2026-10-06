@@ -1792,7 +1792,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                       textBase,
                       topicsOnly: topicsOnly,
                     ),
-                    // Upstream comment translated to English.
+                    // 1. 搜索框 + 历史按钮（固定头部）；多选时换成计数栏
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 220),
                       switchInCurve: Curves.easeOutCubic,
@@ -1850,7 +1850,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                 'sidebar-search-header',
                               ),
                               child: _isDesktop
-                                  // Upstream comment translated to English.
+                                  // 桌面端
                                   ? Padding(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 2,
@@ -2454,7 +2454,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                               ),
                                             ),
                                             const SizedBox(width: 4),
-                                            // Upstream comment translated to English.
+                                            // 历史按钮（圆形，无水波纹）
                                             SizedBox(
                                               width: 44,
                                               height: 44,
@@ -2548,14 +2548,14 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                     if (!widget.globalSearchMode) ...[
                       SizedBox(height: _isDesktop ? 8 : 12),
 
-                      // Upstream comment translated to English.
+                      // 桌面端：替换为 Tab（助手 / 话题）
                       if (useTabs)
                         _DesktopSidebarTabs(
                           textColor: textBase,
                           controller: _tabController!,
                         )
                       else if (!assistOnly && !topicsOnly)
-                        // Upstream comment translated to English.
+                        // 当前助手区域（固定）
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: KeyedSubtree(
@@ -2646,7 +2646,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                         ),
                     ],
 
-                    // Upstream comment translated to English.
+                    // 注意：内联助手列表已移动至下方可滚动区域
                   ],
                 ),
               ),
@@ -2815,7 +2815,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                   Row(
                                     children: [
                                       const SizedBox(width: 6),
-                                      // Upstream comment translated to English.
+                                      // 用户头像（可点击更换）—移除水波纹
                                       GestureDetector(
                                         behavior: HitTestBehavior.opaque,
                                         onTap: () => _editAvatar(context),
@@ -2826,7 +2826,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(width: 20),
-                                      // Upstream comment translated to English.
+                                      // 用户名称（可点击编辑，垂直居中）
                                       Expanded(
                                         child: IosCardPress(
                                           borderRadius: BorderRadius.circular(
@@ -2859,7 +2859,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      // Upstream comment translated to English.
+                                      // 翻译按钮（圆形，无水波纹）
                                       SizedBox(
                                         width: 45,
                                         height: 45,
@@ -2881,7 +2881,7 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      // Upstream comment translated to English.
+                                      // 设置按钮（圆形，无水波纹）
                                       SizedBox(
                                         width: 45,
                                         height: 45,

@@ -55,7 +55,7 @@ bool isWorkspaceToolName(String name) =>
 /// True when this part should use workspace tool chrome. Routed by tool
 /// name in every state (pending, running, done, error, and after reload)
 /// so a missing `metadata['workspace']` wrapper cannot fall back to
-// Upstream comment translated to English.
+/// "调用工具: …".
 bool shouldUseWorkspaceToolUi(WorkspaceToolPart part) =>
     isWorkspaceToolName(part.toolName);
 

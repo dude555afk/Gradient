@@ -248,7 +248,7 @@ class MemoryPipelineService {
     }
   }
 
-  // Upstream comment translated to English.
+  /// Manual "整理记忆" — bypasses autoOrganize + N-turns; still needs model.
   Future<MemoryOrganizeResult> runNow({
     required String conversationId,
     required String assistantId,

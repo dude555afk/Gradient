@@ -5,7 +5,7 @@ import '../../../core/providers/settings_provider.dart';
 import '../../../core/services/api/chat_api_service.dart';
 import '../../../core/services/api/retry_policy.dart';
 
-// Upstream comment translated to English.
+/// OCR 缓存条目
 class OcrCacheEntry {
   OcrCacheEntry({required this.text});
   final String text;
@@ -25,12 +25,12 @@ class OcrPrepareSession {
   int get artifactSize => artifactTextsByHash.length;
 }
 
-// Upstream comment translated to English.
+/// OCR 图片处理服务
 ///
-// Upstream comment translated to English.
-// Upstream comment translated to English.
-// Upstream comment translated to English.
-// Upstream comment translated to English.
+/// 功能：
+/// - 运行 OCR 识别图片内容
+/// - 管理 OCR 缓存（内存 LRU → 请求级 artifact 快照 → SQLite → OCR 模型）
+/// - 包装 OCR 结果为 XML 格式
 class OcrService {
   OcrService({
     this.maxCacheEntries = 48,
@@ -46,7 +46,7 @@ class OcrService {
   static const String defaultOcrUserPrompt =
       'Please perform OCR on the attached image(s) and return only the extracted text and visual descriptions.';
 
-  // Upstream comment translated to English.
+  /// LRU 缓存最大条目数
   final int maxCacheEntries;
 
   /// Resolve image path/data-URL → content SHA-256.
@@ -70,16 +70,16 @@ class OcrService {
   /// Reports OCR model request failures without interrupting the chat request.
   void Function(Object error)? onError;
 
-  // Upstream comment translated to English.
+  /// OCR 缓存 (memoryKey -> cached OCR text)
   final Map<String, OcrCacheEntry> _cache = <String, OcrCacheEntry>{};
 
-  // Upstream comment translated to English.
+  /// LRU 顺序列表 (最旧的在前)
   final List<String> _cacheOrder = <String>[];
 
-  // Upstream comment translated to English.
+  /// 获取缓存条目数量（用于测试/调试）
   int get cacheSize => _cache.length;
 
-  // Upstream comment translated to English.
+  /// 清除缓存
   void clearCache() {
     _cache.clear();
     _cacheOrder.clear();
@@ -89,7 +89,7 @@ class OcrService {
     return '$memoryKeyPrefix$contentHash';
   }
 
-  // Upstream comment translated to English.
+  /// 构建发给 OCR 模型的消息。提示词为空时不附加 system，以兼容 GLM-OCR 等专用接口。
   static List<Map<String, dynamic>> buildOcrRequestMessages(String prompt) {
     final trimmed = prompt.trim();
     return <Map<String, dynamic>>[
@@ -98,13 +98,13 @@ class OcrService {
     ];
   }
 
-  // Upstream comment translated to English.
+  /// 运行 OCR 识别图片内容
   ///
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
+  /// [imagePaths] 图片路径列表
+  /// [context] BuildContext 用于获取 SettingsProvider
   /// [requestId] conversation send id; Stop cancels this OCR request too
   ///
-  // Upstream comment translated to English.
+  /// 返回识别的文本内容，失败时返回 null
   Future<String?> runOcrForImages(
     List<String> imagePaths,
     BuildContext context, {
@@ -157,7 +157,7 @@ class OcrService {
     return out;
   }
 
-  // Upstream comment translated to English.
+  /// 缓存 OCR 文本结果（按内容哈希）
   void cacheOcrText(String contentHash, String text) {
     final hash = contentHash.trim();
     if (hash.isEmpty) return;
@@ -167,17 +167,17 @@ class OcrService {
     _cacheOrder.remove(key);
     _cacheOrder.add(key);
 
-    // Upstream comment translated to English.
+    // LRU 淘汰：移除最旧的条目
     while (_cacheOrder.length > maxCacheEntries) {
       final oldest = _cacheOrder.removeAt(0);
       _cache.remove(oldest);
     }
   }
 
-  // Upstream comment translated to English.
+  /// 获取缓存的 OCR 文本
   ///
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
+  /// 返回缓存的文本，不存在时返回 null
+  /// 访问时会更新 LRU 顺序
   String? getCachedOcrText(String contentHash) {
     final hash = contentHash.trim();
     if (hash.isEmpty) return null;
@@ -270,15 +270,15 @@ class OcrService {
     return session;
   }
 
-  // Upstream comment translated to English.
+  /// 获取图片的 OCR 文本（优先使用缓存）
   ///
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
+  /// [imagePaths] 图片路径列表
+  /// [context] BuildContext 用于获取 SettingsProvider
+  /// [revisionId] 带图 user 消息 revision，用于 SQLite 持久化
   /// [session] optional per-prepare snapshot from [prefetchPersistedOcr]
   /// [requestId] conversation send id so chat Stop also cancels OCR backoff
   ///
-  // Upstream comment translated to English.
+  /// 返回合并后的 OCR 文本，失败时返回 null
   Future<String?> getOcrTextForImages(
     List<String> imagePaths,
     BuildContext context, {
@@ -413,11 +413,11 @@ class OcrService {
     return out.isEmpty ? null : out;
   }
 
-  // Upstream comment translated to English.
+  /// 包装 OCR 文本为 XML 格式
   ///
-  // Upstream comment translated to English.
+  /// [ocrText] OCR 识别的原始文本
   ///
-  // Upstream comment translated to English.
+  /// 返回包装后的 XML 格式文本
   String wrapOcrBlock(String ocrText) {
     final buf = StringBuffer();
     buf.writeln(

@@ -952,13 +952,13 @@ class _SegTabBarState extends State<_SegTabBar> {
                   child: _TactileRow(
                     onTap: () => widget.controller.animateTo(index),
                     builder: (pressed) {
-                      // Upstream comment translated to English.
+                      // 背景不随按压变化：仅选中时有浅主题底色，未选中透明
                       final Color baseBg = selected
                           ? cs.primary.withValues(alpha: 0.14)
                           : Colors.transparent;
                       final Color bg = baseBg; // 不叠加遮罩，不改变底色
 
-                      // Upstream comment translated to English.
+                      // 仅文字在按压时变浅并有渐变
                       final Color baseTextColor = selected
                           ? cs
                                 .primary // 选中文字：主题色

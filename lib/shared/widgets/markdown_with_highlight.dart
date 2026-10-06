@@ -1353,7 +1353,7 @@ String _preprocessFences(
   out = out.replaceAllMapped(inlineClosing, (m) => "${m[1]}\n```");
 
   // 5) Disambiguate Setext vs HR after label-value lines:
-  // Upstream comment translated to English.
+  // If a line of only dashes follows a bold label line (e.g., "**作者:** 张三"),
   // insert a blank line so it's treated as an HR, not a Setext heading underline.
   final labelThenDash = RegExp(
     r"^(\*\*[^\n*]+\*\*.*)\n(\s*-{3,}\s*$)",
@@ -1361,7 +1361,7 @@ String _preprocessFences(
   );
   out = out.replaceAllMapped(labelThenDash, (m) => "${m[1]}\n\n${m[2]}");
 
-  // Upstream comment translated to English.
+  // 6) Allow ATX headings starting with enumerations like "## 1.引言" or "## 1. 引言"
   // Insert a zero-width non-joiner after the dot to prevent list parsing without changing visual text.
   final atxEnum = RegExp(
     r'^([ \t]{0,3}#{1,6}[ \t]+\d+)\.([ \t]*)(\S)',
@@ -5468,7 +5468,7 @@ class InlineLatexParenScrollableMd extends InlineMd {
 }
 
 /// Single-line ATX. Opening `#{1,6}`, closing `#+`, horizontal blanks only.
-// Upstream comment translated to English.
+/// Shared by [AtxHeadingMd] and the `## 1.引言` preprocessor so they cannot
 /// drift back into `\s` / cross-line matching.
 const String _atxHeadingLine =
     r'[ \t]{0,3}(#{1,6})[ \t]+([^\r\n\u2028\u2029]+?)(?:[ \t]+#+[ \t]*)?';
@@ -5613,7 +5613,7 @@ class SetextHeadingMd extends BlockMd {
   }
 }
 
-// Upstream comment translated to English.
+// Label-value strong lines like "**作者:** 张三" should not render as heading-sized text
 class LabelValueLineMd extends InlineMd {
   @override
   // Treat this as an inline transform so it only affects the matched
@@ -5621,10 +5621,10 @@ class LabelValueLineMd extends InlineMd {
   bool get inline => false;
 
   @override
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
-  // Upstream comment translated to English.
+  // 同时匹配两种写法：
+  // 1) **标签:** 值   （冒号在加粗内）
+  // 2) **标签**: 值   （冒号在加粗外）
+  // 支持半角/全角冒号
   RegExp get exp =>
       RegExp(r"(?:(?:^|\n)\*\*([^*]+?)\*\*\s*[：:]?\s+(.+)$)", multiLine: true);
 
@@ -5633,14 +5633,14 @@ class LabelValueLineMd extends InlineMd {
     final match = exp.firstMatch(text);
     if (match == null) return TextSpan(text: text, style: config.style);
 
-    // Upstream comment translated to English.
+    // 提取并规范化标签与值
     var rawLabel = (match.group(1) ?? '').trim();
     final value = (match.group(2) ?? '').trim();
-    // Upstream comment translated to English.
+    // 如果标签末尾自带冒号，去掉以避免重复
     rawLabel = rawLabel.replaceFirst(RegExp(r"[：:]+$"), '');
 
     final t = Theme.of(context).textTheme;
-    // Upstream comment translated to English.
+    // 继承基础样式，确保字间距/行高一致
     final base = (config.style ?? t.bodyMedium ?? TextStyle(fontSize: 14));
     final labelStyle = base.copyWith(
       fontWeight: AppFontWeights.strong,
@@ -5651,7 +5651,7 @@ class LabelValueLineMd extends InlineMd {
       color: _markdownInkColor(context, 0.92),
     );
 
-    // Upstream comment translated to English.
+    // 将值部分继续按 markdown 解析，保证链接/引用等语法正常
     final valueChildren = MarkdownComponent.generate(
       context,
       value,
@@ -5659,7 +5659,7 @@ class LabelValueLineMd extends InlineMd {
       true,
     );
 
-    // Upstream comment translated to English.
+    // 返回 TextSpan（而非 WidgetSpan）以保证在外层 RichText/SelectionArea 中可选择复制
     return TextSpan(
       children: [
         TextSpan(text: rawLabel, style: labelStyle),
