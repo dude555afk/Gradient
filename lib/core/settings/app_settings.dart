@@ -26,6 +26,7 @@ class AiSettings {
     required this.reasoningEffort,
     required this.githubClientId,
     required this.preferFreeModels,
+    this.availableModels = const [],
   });
 
   final String baseUrl;
@@ -59,6 +60,10 @@ class AiSettings {
   /// Explicit role primaries always remain first.
   final bool preferFreeModels;
 
+  /// Models returned by the provider's model catalogue. These are used as
+  /// automatic fallbacks after explicit role fallbacks.
+  final List<String> availableModels;
+
   bool get providerReady =>
       baseUrl.trim().isNotEmpty && defaultModel.trim().isNotEmpty;
 
@@ -79,10 +84,16 @@ class AiSettings {
   }
 
   List<String> modelCandidates(ModelRole role) {
-    final ordered = <String>[
+    final explicit = <String>[
       primaryModelFor(role),
       ...?fallbackModels[role.key],
       if (role != ModelRole.general) defaultModel,
+    ];
+
+    final automatic = _automaticFallbacks(role);
+    final ordered = <String>[
+      ...explicit,
+      ...automatic,
     ];
 
     final seen = <String>{};
@@ -100,10 +111,90 @@ class AiSettings {
       ..sort((a, b) {
         final af = _looksFree(a) ? 0 : 1;
         final bf = _looksFree(b) ? 0 : 1;
-        return af.compareTo(bf);
+        if (af != bf) return af.compareTo(bf);
+        return _roleScore(b, role).compareTo(_roleScore(a, role));
       });
     return [primary, ...rest];
   }
+
+  List<String> _automaticFallbacks(ModelRole role) {
+    final primary = primaryModelFor(role).toLowerCase();
+    final configured = <String>{
+      primaryModelFor(role).toLowerCase(),
+      defaultModel.toLowerCase(),
+      ...?fallbackModels[role.key]?.map((e) => e.toLowerCase()),
+    };
+
+    final candidates = availableModels
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .where((e) => !configured.contains(e.toLowerCase()))
+        .where((e) {
+          if (role != ModelRole.vision && role != ModelRole.ocr) return true;
+          final id = e.toLowerCase();
+          return _containsAny(id, const [
+            'vision',
+            '-vl',
+            '/vl',
+            'qwen-vl',
+            'qwen2.5-vl',
+            'gemini',
+            'pixtral',
+            'multimodal',
+          ]);
+        })
+        .toList(growable: false);
+
+    candidates.sort((a, b) {
+      final freeA = _looksFree(a) ? 1 : 0;
+      final freeB = _looksFree(b) ? 1 : 0;
+      if (preferFreeModels && freeA != freeB) return freeB.compareTo(freeA);
+      final score = _roleScore(b, role).compareTo(_roleScore(a, role));
+      if (score != 0) return score;
+      return a.compareTo(b);
+    });
+
+    // Keep the fallback chain bounded so one bad request cannot walk the
+    // provider's entire model catalogue.
+    return candidates.take(4).toList(growable: false);
+  }
+
+  static int _roleScore(String model, ModelRole role) {
+    final id = model.toLowerCase();
+    var score = 0;
+    void boost(List<String> needles, int value) {
+      if (_containsAny(id, needles)) score += value;
+    }
+
+    switch (role) {
+      case ModelRole.coding:
+      case ModelRole.debugging:
+        boost(const ['coder', 'code', 'qwen', 'deepseek', 'glm', 'step'], 6);
+        break;
+      case ModelRole.reasoning:
+      case ModelRole.reviewer:
+        boost(const ['reason', 'r1', 'o3', 'o4', 'deepseek', 'glm', 'qwen'], 6);
+        break;
+      case ModelRole.vision:
+      case ModelRole.ocr:
+        boost(const ['vision', '-vl', '/vl', 'gemini', 'pixtral', 'multimodal'], 8);
+        break;
+      case ModelRole.fast:
+        boost(const ['flash', 'mini', 'fast', 'lite'], 7);
+        break;
+      case ModelRole.research:
+      case ModelRole.explainer:
+      case ModelRole.general:
+        boost(const ['flash', 'qwen', 'glm', 'step', 'gemini', 'deepseek'], 4);
+        break;
+    }
+
+    if (_looksFree(model)) score += 3;
+    return score;
+  }
+
+  static bool _containsAny(String text, List<String> needles) =>
+      needles.any(text.contains);
 
   String modelFor(ModelRole role) {
     final candidates = modelCandidates(role);
@@ -138,6 +229,7 @@ class AiSettings {
     String? reasoningEffort,
     String? githubClientId,
     bool? preferFreeModels,
+    List<String>? availableModels,
   }) {
     return AiSettings(
       baseUrl: baseUrl ?? this.baseUrl,
@@ -159,6 +251,7 @@ class AiSettings {
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
       githubClientId: githubClientId ?? this.githubClientId,
       preferFreeModels: preferFreeModels ?? this.preferFreeModels,
+      availableModels: availableModels ?? this.availableModels,
     );
   }
 
@@ -207,6 +300,9 @@ class AppSettingsStore {
     final roleWebEnabled = _decodeBoolMap(
       prefs.getString(_roleWebKey),
     );
+    final availableModels = _decodeModelList(
+      prefs.getString(_cachedModelsKey),
+    );
 
     return AiSettings(
       baseUrl:
@@ -229,6 +325,7 @@ class AppSettingsStore {
       reasoningEffort: prefs.getString('ai_reasoning_effort') ?? '',
       githubClientId: prefs.getString('github_client_id') ?? '',
       preferFreeModels: prefs.getBool('ai_prefer_free_models') ?? true,
+      availableModels: availableModels,
     );
   }
 
@@ -331,6 +428,21 @@ class AppSettingsStore {
   }
 
   Future<void> clearGithubToken() => _secure.delete(key: _githubTokenKey);
+  List<String> _decodeModelList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return decoded
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Map<String, List<String>> _decodeFallbackModels(String? raw) {
     if (raw == null || raw.trim().isEmpty) return const {};
     try {
