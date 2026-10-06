@@ -236,8 +236,8 @@ abstract class BuiltInToolsHelper {
                 providerId.contains('volc') ||
                 providerId.contains('ark') ||
                 providerName.contains('doubao') ||
-                providerName.contains('火山') ||
-                providerName.contains('方舟')));
+                providerName.contains('\u706b\u5c71') ||
+                providerName.contains('\u65b9\u821f')));
   }
 
   static bool isMimoProvider(ProviderConfig? cfg) {
@@ -249,7 +249,7 @@ abstract class BuiltInToolsHelper {
         host.contains('mimo') ||
         providerId.contains('mimo') ||
         providerName.contains('mimo') ||
-        providerName.contains('小米');
+        providerName.contains('\u5c0f\u7c73');
   }
 
   static bool isMoonshotProvider(ProviderConfig? cfg) {
