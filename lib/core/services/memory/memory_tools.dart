@@ -112,19 +112,21 @@ abstract final class MemoryTools {
   /// Localised by [lang] like [buildDefinitions], so the schemas match the
   /// language the legacy rules are sent in.
   static List<Map<String, dynamic>> legacyDefinitions(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return [
       {
         'type': 'function',
         'function': {
           'name': 'create_memory',
-          'description': 'Create a memory record.',
+          'description': zh ? '\u65b0\u589e\u4e00\u6761\u8bb0\u5fc6\u8bb0\u5f55。' : 'Create a memory record.',
           'parameters': {
             'type': 'object',
             'properties': {
               'content': {
                 'type': 'string',
-                'description': 'The content of the memory record.',
+                'description': zh
+                    ? '\u8bb0\u5fc6\u8bb0\u5f55\u7684\u5185\u5bb9。'
+                    : 'The content of the memory record.',
               },
             },
             'required': ['content'],
@@ -135,17 +137,23 @@ abstract final class MemoryTools {
         'type': 'function',
         'function': {
           'name': 'edit_memory',
-          'description': 'Update an existing memory record.',
+          'description': zh
+              ? '\u66f4\u65b0\u4e00\u6761\u5df2\u6709\u7684\u8bb0\u5fc6\u8bb0\u5f55。'
+              : 'Update an existing memory record.',
           'parameters': {
             'type': 'object',
             'properties': {
               'id': {
                 'type': 'integer',
-                'description': 'The id of the memory record.',
+                'description': zh
+                    ? '\u8bb0\u5fc6\u8bb0\u5f55\u7684 id。'
+                    : 'The id of the memory record.',
               },
               'content': {
                 'type': 'string',
-                'description': 'The content of the memory record.',
+                'description': zh
+                    ? '\u8bb0\u5fc6\u8bb0\u5f55\u7684\u5185\u5bb9。'
+                    : 'The content of the memory record.',
               },
             },
             'required': ['id', 'content'],
@@ -156,13 +164,15 @@ abstract final class MemoryTools {
         'type': 'function',
         'function': {
           'name': 'delete_memory',
-          'description': 'Delete a memory record.',
+          'description': zh ? '\u5220\u9664\u4e00\u6761\u8bb0\u5fc6\u8bb0\u5f55。' : 'Delete a memory record.',
           'parameters': {
             'type': 'object',
             'properties': {
               'id': {
                 'type': 'integer',
-                'description': 'The id of the memory record.',
+                'description': zh
+                    ? '\u8bb0\u5fc6\u8bb0\u5f55\u7684 id。'
+                    : 'The id of the memory record.',
               },
             },
             'required': ['id'],
@@ -886,34 +896,44 @@ abstract final class MemoryTools {
   // —— Schema builders ——
 
   static Map<String, dynamic> _defMemoryRead(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return {
       'type': 'function',
       'function': {
         'name': memoryRead,
-        'description': 'Read the user\\'s long-term memory. Optional type: identity (name, people around them, occupation, etc.), workflow (ways of working, tool preferences, debugging habits), voice (writing style, rhythm, word choice), instruction (explicit requests to you). Omit type to return all types. Paginate with limit and offset. The result total counts all entries matching the filters. When has_more is true, keep the same filters and pass next_offset as offset to read the next page; next_offset is null on the last page. A memory summary is already in the conversation; call this only when a block is marked mode="summary" (truncated) or you need entry ids.',
+        'description': zh
+            ? '\u8bfb\u53d6\u7528\u6237\u7684\u957f\u671f\u8bb0\u5fc6。type \u53ef\u9009：identity（\u59d3\u540d、\u8eab\u8fb9\u7684\u4eba、\u804c\u4e1a\u7b49\u8eab\u4efd\u4fe1\u606f）、workflow（\u505a\u4e8b\u65b9\u5f0f、\u5de5\u5177\u504f\u597d、\u8c03\u8bd5\u4e60\u60ef）、voice（\u884c\u6587\u98ce\u683c、\u53e5\u5f0f\u8282\u594f、\u7528\u8bcd\u4e60\u60ef）、instruction（\u7528\u6237\u5bf9\u4f60\u7684\u660e\u786e\u8981\u6c42）。\u4e0d\u4f20 type \u5219\u8fd4\u56de\u5168\u90e8\u7c7b\u578b。\u4f7f\u7528 limit \u548c offset \u5206\u9875；\u7ed3\u679c\u4e2d total \u4e3a\u7b5b\u9009\u540e\u7684\u603b\u6761\u6570，has_more \u4e3a true \u65f6，\u4fdd\u6301\u7b5b\u9009\u6761\u4ef6\u4e0d\u53d8，\u5c06 next_offset \u4f5c\u4e3a\u4e0b\u6b21\u8c03\u7528\u7684 offset \u7ee7\u7eed\u8bfb\u53d6，\u6700\u540e\u4e00\u9875 next_offset \u4e3a null。\u5bf9\u8bdd\u4e2d\u5df2\u7ecf\u63d0\u4f9b\u4e86\u8bb0\u5fc6\u6458\u8981，\u53ea\u6709\u5728\u6458\u8981\u6807\u4e86 mode="summary" \u88ab\u622a\u65ad、\u6216\u9700\u8981\u62ff\u5230\u6761\u76ee id \u65f6\u624d\u9700\u8981\u8c03\u7528。'
+            : 'Read the user\'s long-term memory. Optional type: identity (name, people around them, occupation, etc.), workflow (ways of working, tool preferences, debugging habits), voice (writing style, rhythm, word choice), instruction (explicit requests to you). Omit type to return all types. Paginate with limit and offset. The result total counts all entries matching the filters. When has_more is true, keep the same filters and pass next_offset as offset to read the next page; next_offset is null on the last page. A memory summary is already in the conversation; call this only when a block is marked mode="summary" (truncated) or you need entry ids.',
         'parameters': {
           'type': 'object',
           'properties': {
             'type': {
               'type': 'string',
               'enum': ['identity', 'workflow', 'voice', 'instruction'],
-              'description': 'Return only memories of this type. Omit to return all types.',
+              'description': zh
+                  ? '\u53ea\u8fd4\u56de\u8be5\u7c7b\u578b\u7684\u8bb0\u5fc6。\u7701\u7565\u5219\u8fd4\u56de\u5168\u90e8\u7c7b\u578b。'
+                  : 'Return only memories of this type. Omit to return all types.',
             },
             'include_archived': {
               'type': 'boolean',
-              'description': 'Whether to include archived memories. Default false.',
+              'description': zh
+                  ? '\u662f\u5426\u5305\u542b\u5df2\u5f52\u6863\u7684\u8bb0\u5fc6。\u9ed8\u8ba4 false。'
+                  : 'Whether to include archived memories. Default false.',
             },
             'limit': {
               'type': 'integer',
               'minimum': 1,
               'maximum': 100,
-              'description': 'Maximum entries per page. Default 50, maximum 100.',
+              'description': zh
+                  ? '\u6bcf\u9875\u6700\u591a\u8fd4\u56de\u591a\u5c11\u6761，\u9ed8\u8ba4 50，\u6700\u5927 100。'
+                  : 'Maximum entries per page. Default 50, maximum 100.',
             },
             'offset': {
               'type': 'integer',
               'minimum': 0,
-              'description': 'Number of matching entries to skip. Default 0. Use next_offset from the previous page to continue.',
+              'description': zh
+                  ? '\u8df3\u8fc7\u7b5b\u9009\u7ed3\u679c\u7684\u6761\u6570，\u9ed8\u8ba4 0。\u4ece\u4e0a\u4e00\u9875\u7684 next_offset \u7ee7\u7eed\u8bfb\u53d6。'
+                  : 'Number of matching entries to skip. Default 0. Use next_offset from the previous page to continue.',
             },
           },
           'required': <String>[],
@@ -926,16 +946,20 @@ abstract final class MemoryTools {
     MemoryPromptLang lang,
     MemoryWriteScope writeScope,
   ) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     final properties = <String, dynamic>{
       'type': {
         'type': 'string',
         'enum': ['identity', 'workflow', 'voice', 'instruction'],
-        'description': 'identity: identity facts; workflow: ways of working and tool preferences; voice: expression style; instruction: explicit requests to you.',
+        'description': zh
+            ? 'identity \u8eab\u4efd\u4fe1\u606f；workflow \u505a\u4e8b\u65b9\u5f0f\u4e0e\u5de5\u5177\u504f\u597d；voice \u8868\u8fbe\u98ce\u683c；instruction \u7528\u6237\u5bf9\u4f60\u7684\u660e\u786e\u8981\u6c42。'
+            : 'identity: identity facts; workflow: ways of working and tool preferences; voice: expression style; instruction: explicit requests to you.',
       },
       'content': {
         'type': 'string',
-        'description': 'One complete, self-contained third-person statement, e.g. "The user prefers direct, actionable explanations in Chinese." Avoid deictic words that refer back to this conversation.',
+        'description': zh
+            ? '\u4e00\u6761\u5b8c\u6574、\u81ea\u5305\u542b\u7684\u7b2c\u4e09\u4eba\u79f0\u9648\u8ff0\u53e5，\u4f8b\u5982「\u7528\u6237\u504f\u597d\u76f4\u63a5、\u53ef\u843d\u5730\u7684\u4e2d\u6587\u8bf4\u660e」。\u4e0d\u8981\u4f7f\u7528「\u8fd9\u4e2a」「\u521a\u624d」\u7b49\u6307\u56de\u672c\u6b21\u5bf9\u8bdd\u7684\u8bcd。'
+            : 'One complete, self-contained third-person statement, e.g. "The user prefers direct, actionable explanations in Chinese." Avoid deictic words that refer back to this conversation.',
       },
     };
     if (writeScope == MemoryWriteScope.toolDefaultGlobal ||
@@ -943,14 +967,18 @@ abstract final class MemoryTools {
       properties['scope'] = {
         'type': 'string',
         'enum': ['global', 'assistant'],
-        'description': 'global is visible to all assistants; assistant is visible only to the current assistant. When omitted, uses the user\\'s configured default.',
+        'description': zh
+            ? 'global \u5bf9\u6240\u6709\u52a9\u624b\u53ef\u89c1；assistant \u53ea\u5bf9\u5f53\u524d\u52a9\u624b\u53ef\u89c1。\u7701\u7565\u65f6\u6309\u7528\u6237\u8bbe\u7f6e\u7684\u9ed8\u8ba4\u503c。'
+            : 'global is visible to all assistants; assistant is visible only to the current assistant. When omitted, uses the user\'s configured default.',
       };
     }
     return {
       'type': 'function',
       'function': {
         'name': memoryUpdate,
-        'description': 'Write one long-term user memory. The system deduplicates and merges with existing memories automatically; you do not need to read then replace. Only write stable facts that will still hold in a future conversation; do not write ephemeral context from this chat.',
+        'description': zh
+            ? '\u5199\u5165\u4e00\u6761\u7528\u6237\u957f\u671f\u8bb0\u5fc6。\u7cfb\u7edf\u4f1a\u81ea\u52a8\u4e0e\u5df2\u6709\u8bb0\u5fc6\u53bb\u91cd\u5408\u5e76，\u4e0d\u9700\u8981\u5148\u8bfb\u53d6\u518d\u5168\u6587\u66ff\u6362。\u53ea\u5199\u4e0b\u6b21\u65b0\u5f00\u5bf9\u8bdd\u65f6\u4ecd\u7136\u6210\u7acb\u7684\u7a33\u5b9a\u4fe1\u606f；\u672c\u6b21\u5bf9\u8bdd\u5185\u7684\u4e34\u65f6\u4e0a\u4e0b\u6587\u4e0d\u8981\u5199。'
+            : 'Write one long-term user memory. The system deduplicates and merges with existing memories automatically; you do not need to read then replace. Only write stable facts that will still hold in a future conversation; do not write ephemeral context from this chat.',
         'parameters': {
           'type': 'object',
           'properties': properties,
@@ -961,29 +989,37 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defMemorySearchProfile(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return {
       'type': 'function',
       'function': {
         'name': memorySearchProfile,
-        'description': 'Search the user\\'s long-term memory. Use when the in-conversation memory summary is incomplete, truncated (mode="summary"), or you need a specific fact. Keyword match; multiple keywords are ANDed.',
+        'description': zh
+            ? '\u641c\u7d22\u7528\u6237\u7684\u957f\u671f\u8bb0\u5fc6。\u5f53\u5bf9\u8bdd\u4e2d\u63d0\u4f9b\u7684\u8bb0\u5fc6\u6458\u8981\u4e0d\u591f\u8be6\u7ec6、\u88ab\u622a\u65ad（\u6807\u4e86 mode="summary"），\u6216\u9700\u8981\u67e5\u627e\u67d0\u4e2a\u7279\u5b9a\u4fe1\u606f\u65f6\u4f7f\u7528。\u6309\u5173\u952e\u8bcd\u5339\u914d，\u591a\u4e2a\u5173\u952e\u8bcd\u4e4b\u95f4\u662f「\u4e14」\u5173\u7cfb。'
+            : 'Search the user\'s long-term memory. Use when the in-conversation memory summary is incomplete, truncated (mode="summary"), or you need a specific fact. Keyword match; multiple keywords are ANDed.',
         'parameters': {
           'type': 'object',
           'properties': {
             'query': {
               'type': 'string',
-              'description': 'Keywords separated by spaces. Continuous Chinese phrases can be used as-is.',
+              'description': zh
+                  ? '\u5173\u952e\u8bcd，\u591a\u4e2a\u7528\u7a7a\u683c\u5206\u9694。\u4e2d\u6587\u53ef\u4ee5\u76f4\u63a5\u5199\u8fde\u7eed\u77ed\u8bed。'
+                  : 'Keywords separated by spaces. Continuous Chinese phrases can be used as-is.',
             },
             'type': {
               'type': 'string',
               'enum': ['identity', 'workflow', 'voice', 'instruction'],
-              'description': 'Search only within this type. Omit to search all types.',
+              'description': zh
+                  ? '\u53ea\u5728\u8be5\u7c7b\u578b\u5185\u641c\u7d22。\u7701\u7565\u5219\u641c\u7d22\u5168\u90e8\u7c7b\u578b。'
+                  : 'Search only within this type. Omit to search all types.',
             },
             'limit': {
               'type': 'integer',
               'minimum': 1,
               'maximum': 20,
-              'description': 'Maximum number of entries to return. Default 10.',
+              'description': zh
+                  ? '\u6700\u591a\u8fd4\u56de\u591a\u5c11\u6761，\u9ed8\u8ba4 10。'
+                  : 'Maximum number of entries to return. Default 10.',
             },
           },
           'required': ['query'],
@@ -993,22 +1029,28 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defMemoryEdit(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return {
       'type': 'function',
       'function': {
         'name': memoryEdit,
-        'description': 'Edit the content of an existing memory. First obtain the entry id (e.g. mem_xxxxxxxx) via memory_read or memory_search_profile. Use only when content is outdated or wrong; for new information use memory_update.',
+        'description': zh
+            ? '\u4fee\u6539\u4e00\u6761\u5df2\u6709\u8bb0\u5fc6\u7684\u5185\u5bb9。\u9700\u8981\u5148\u7528 memory_read \u6216 memory_search_profile \u62ff\u5230\u6761\u76ee id（\u5f62\u5982 mem_xxxxxxxx）。\u53ea\u5728\u8bb0\u5fc6\u5185\u5bb9\u786e\u5b9e\u8fc7\u65f6\u6216\u6709\u9519\u65f6\u4f7f\u7528；\u8865\u5145\u65b0\u4fe1\u606f\u8bf7\u7528 memory_update。'
+            : 'Edit the content of an existing memory. First obtain the entry id (e.g. mem_xxxxxxxx) via memory_read or memory_search_profile. Use only when content is outdated or wrong; for new information use memory_update.',
         'parameters': {
           'type': 'object',
           'properties': {
             'id': {
               'type': 'string',
-              'description': 'Entry id, e.g. mem_a1b2c3d4.',
+              'description': zh
+                  ? '\u6761\u76ee id，\u5f62\u5982 mem_a1b2c3d4。'
+                  : 'Entry id, e.g. mem_a1b2c3d4.',
             },
             'content': {
               'type': 'string',
-              'description': 'The full replacement content.',
+              'description': zh
+                  ? '\u4fee\u6539\u540e\u7684\u5b8c\u6574\u5185\u5bb9，\u4f1a\u6574\u4f53\u66ff\u6362\u539f\u5185\u5bb9。'
+                  : 'The full replacement content.',
             },
           },
           'required': ['id', 'content'],
@@ -1018,18 +1060,22 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defMemoryDelete(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return {
       'type': 'function',
       'function': {
         'name': memoryDelete,
-        'description': 'Archive a memory (soft delete). Archived entries disappear from the memory summary and search results, but the user can still see and restore them in settings. First obtain the entry id via memory_read or memory_search_profile. Use only when the user clearly says a memory no longer holds.',
+        'description': zh
+            ? '\u5f52\u6863\u4e00\u6761\u8bb0\u5fc6（\u8f6f\u5220\u9664）。\u5f52\u6863\u540e\u4e0d\u518d\u51fa\u73b0\u5728\u8bb0\u5fc6\u6458\u8981\u548c\u641c\u7d22\u7ed3\u679c\u91cc，\u7528\u6237\u4ecd\u53ef\u4ee5\u5728\u8bbe\u7f6e\u4e2d\u770b\u5230\u5e76\u6062\u590d。\u9700\u8981\u5148\u7528 memory_read \u6216 memory_search_profile \u62ff\u5230\u6761\u76ee id。\u53ea\u5728\u7528\u6237\u660e\u786e\u8868\u793a\u67d0\u6761\u8bb0\u5fc6\u4e0d\u518d\u6210\u7acb\u65f6\u4f7f\u7528。'
+            : 'Archive a memory (soft delete). Archived entries disappear from the memory summary and search results, but the user can still see and restore them in settings. First obtain the entry id via memory_read or memory_search_profile. Use only when the user clearly says a memory no longer holds.',
         'parameters': {
           'type': 'object',
           'properties': {
             'id': {
               'type': 'string',
-              'description': 'Entry id, e.g. mem_a1b2c3d4.',
+              'description': zh
+                  ? '\u6761\u76ee id，\u5f62\u5982 mem_a1b2c3d4。'
+                  : 'Entry id, e.g. mem_a1b2c3d4.',
             },
           },
           'required': ['id'],
@@ -1039,28 +1085,34 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defUpdateUserProfile(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return {
       'type': 'function',
       'function': {
         'name': updateUserProfile,
-        'description': 'Update user profile fields. These are the most stable identity facts. Do not write when uncertain.',
+        'description': zh
+            ? '\u66f4\u65b0\u7528\u6237\u753b\u50cf\u5b57\u6bb5。\u8fd9\u4e9b\u662f\u6700\u7a33\u5b9a\u7684\u8eab\u4efd\u4fe1\u606f。\u4e0d\u786e\u5b9a\u7684\u65f6\u5019\u4e0d\u8981\u5199。'
+            : 'Update user profile fields. These are the most stable identity facts. Do not write when uncertain.',
         'parameters': {
           'type': 'object',
           'properties': {
             'fields': {
               'type': 'array',
-              'description': 'List of fields to update.',
+              'description': zh ? '\u8981\u66f4\u65b0\u7684\u5b57\u6bb5\u5217\u8868。' : 'List of fields to update.',
               'items': {
                 'type': 'object',
                 'properties': {
                   'key': {
                     'type': 'string',
-                    'description': 'Allowed keys: preferred_name (how the user wants to be addressed), gender, pronouns, preferred_language, timezone, occupation, location. Other stable fields use custom.<name> where name is letters, digits, underscore, or hyphen only.',
+                    'description': zh
+                        ? '\u53ef\u7528\u5b57\u6bb5：preferred_name（\u7528\u6237\u5e0c\u671b\u4f60\u600e\u4e48\u79f0\u547c\u4ed6）、gender、pronouns、preferred_language、timezone、occupation、location。\u5176\u4ed6\u7a33\u5b9a\u5b57\u6bb5\u7528 custom.<\u540d\u79f0>，\u540d\u79f0\u53ea\u80fd\u662f\u5b57\u6bcd、\u6570\u5b57、\u4e0b\u5212\u7ebf\u6216\u8fde\u5b57\u7b26。'
+                        : 'Allowed keys: preferred_name (how the user wants to be addressed), gender, pronouns, preferred_language, timezone, occupation, location. Other stable fields use custom.<name> where name is letters, digits, underscore, or hyphen only.',
                   },
                   'value': {
                     'type': 'string',
-                    'description': 'Field value. An empty string clears the field.',
+                    'description': zh
+                        ? '\u5b57\u6bb5\u53d6\u503c。\u4f20\u7a7a\u5b57\u7b26\u4e32\u8868\u793a\u6e05\u9664\u8be5\u5b57\u6bb5。'
+                        : 'Field value. An empty string clears the field.',
                   },
                 },
                 'required': ['key', 'value'],
@@ -1074,28 +1126,36 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defChatSearch(MemoryPromptLang lang) {
-    final zh = lang == MemoryPromptLang.zh;
+    const zh = false;
     return {
       'type': 'function',
       'function': {
         'name': chatSearch,
-        'description': 'Search message content in this assistant\\'s past conversations (and unowned older chats) by keywords. Prefer this when recalling prior discussion, or when the user mentions "last time", "earlier", or "we discussed". By default the current conversation is excluded because it is already in context.',
+        'description': zh
+            ? '\u5728\u5386\u53f2\u5bf9\u8bdd\u4e2d\u6309\u5173\u952e\u8bcd\u641c\u7d22\u6d88\u606f\u5185\u5bb9（\u4ec5\u5f53\u524d\u52a9\u624b\u7684\u4f1a\u8bdd，\u4ee5\u53ca\u6ca1\u6709\u5f52\u5c5e\u52a9\u624b\u7684\u65e7\u4f1a\u8bdd）。\u9700\u8981\u56de\u5fc6\u4e4b\u524d\u804a\u8fc7\u4ec0\u4e48，\u6216\u8005\u7528\u6237\u63d0\u5230「\u4e0a\u6b21」「\u4e4b\u524d\u8bf4\u7684」「\u6211\u4eec\u8ba8\u8bba\u8fc7」\u65f6，\u4f18\u5148\u4f7f\u7528\u8fd9\u4e2a\u5de5\u5177。\u9ed8\u8ba4\u4e0d\u641c\u7d22\u5f53\u524d\u5bf9\u8bdd，\u56e0\u4e3a\u5f53\u524d\u5bf9\u8bdd\u7684\u5185\u5bb9\u5df2\u7ecf\u5728\u4e0a\u4e0b\u6587\u91cc。'
+            : 'Search message content in this assistant\'s past conversations (and unowned older chats) by keywords. Prefer this when recalling prior discussion, or when the user mentions "last time", "earlier", or "we discussed". By default the current conversation is excluded because it is already in context.',
         'parameters': {
           'type': 'object',
           'properties': {
             'query': {
               'type': 'string',
-              'description': 'Keywords separated by spaces.',
+              'description': zh
+                  ? '\u5173\u952e\u8bcd，\u591a\u4e2a\u7528\u7a7a\u683c\u5206\u9694。'
+                  : 'Keywords separated by spaces.',
             },
             'limit': {
               'type': 'integer',
               'minimum': 1,
               'maximum': 20,
-              'description': 'Maximum number of results. Default 10.',
+              'description': zh
+                  ? '\u6700\u591a\u8fd4\u56de\u591a\u5c11\u6761，\u9ed8\u8ba4 10。'
+                  : 'Maximum number of results. Default 10.',
             },
             'conversation_id': {
               'type': 'string',
-              'description': 'Search only within this conversation. Omit to search this assistant\\'s visible conversations except the current one.',
+              'description': zh
+                  ? '\u53ea\u5728\u6307\u5b9a\u4f1a\u8bdd\u5185\u641c\u7d22。\u7701\u7565\u5219\u641c\u7d22\u9664\u5f53\u524d\u4f1a\u8bdd\u5916、\u5f53\u524d\u52a9\u624b\u53ef\u89c1\u7684\u4f1a\u8bdd。'
+                  : 'Search only within this conversation. Omit to search this assistant\'s visible conversations except the current one.',
             },
           },
           'required': ['query'],
