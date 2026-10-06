@@ -92,7 +92,7 @@ abstract final class MemoryExtractor {
         writeScope == MemoryWriteScope.toolDefaultAssistant;
     if (toolDefault) {
       final rule = MemoryPrompts.extractToolDefaultScopeRuleFor(lang);
-      final marker = lang == MemoryPromptLang.'## Existing memory';
+      const marker = '## Existing memory';
       if (template.contains(marker)) {
         template = template.replaceFirst(marker, '$rule\n\n$marker');
       } else {
