@@ -6,8 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/agent/agent_models.dart';
-import '../../core/agent/background_agent_runtime.dart';
-import '../../core/agent/agent_service.dart';
+import '../../core/agent/agent_task_coordinator.dart';
 import '../../core/agent/agent_session_store.dart';
 import '../../core/ai/openai_compatible_provider.dart';
 import '../../core/diff/simple_diff.dart';
@@ -37,6 +36,7 @@ class _AgentSheetState extends State<AgentSheet> {
   final _scrollController = ScrollController();
   final _settings = AppSettingsStore();
   final _sessionStore = AgentSessionStore();
+  final _taskCoordinator = AgentTaskCoordinator.instance;
   final _imagePicker = ImagePicker();
 
   final _messages = <AgentMessage>[];
@@ -49,6 +49,8 @@ class _AgentSheetState extends State<AgentSheet> {
   String? _taskBranch;
   String _streamingText = '';
   final _streamingNotifier = ValueNotifier<String>('');
+  ValueListenable<AgentTaskSnapshot>? _taskListenable;
+  VoidCallback? _taskListener;
   bool _scrollTickPending = false;
   bool _titleGenerationInFlight = false;
   bool _busy = false;
@@ -96,7 +98,61 @@ class _AgentSheetState extends State<AgentSheet> {
       widget.workspace.fullName,
       conversation.id,
     );
+    _attachTask(conversation.id);
     _scrollToLatest();
+  }
+
+  void _attachTask(String conversationId) {
+    final previous = _taskListenable;
+    final previousListener = _taskListener;
+    if (previous != null && previousListener != null) {
+      previous.removeListener(previousListener);
+    }
+
+    final listenable = _taskCoordinator.listenable(conversationId);
+    _taskListenable = listenable;
+
+    if (listenable == null) {
+      _taskListener = null;
+      if (mounted && _busy) {
+        setState(() {
+          _busy = false;
+          _progress.clear();
+          _streamingText = '';
+          _streamingNotifier.value = '';
+        });
+      }
+      return;
+    }
+
+    void sync() {
+      if (!mounted) return;
+      final snapshot = listenable.value;
+      setState(() {
+        _busy = snapshot.running;
+        _streamingText = snapshot.streamingText;
+        _streamingNotifier.value = snapshot.streamingText;
+        _progress
+          ..clear()
+          ..addAll(snapshot.progress);
+        _conversation = snapshot.conversation;
+        _messages
+          ..clear()
+          ..addAll(snapshot.conversation.messages);
+        _changes
+          ..clear()
+          ..addAll(snapshot.conversation.changes);
+        _pullRequests
+          ..clear()
+          ..addAll(snapshot.conversation.pullRequests);
+        _taskBranch = snapshot.conversation.taskBranch;
+      });
+      _scrollToLatest();
+    }
+
+    _taskListener = sync;
+    listenable.addListener(sync);
+    sync();
   }
 
   Future<void> _persistSession() async {
@@ -133,7 +189,7 @@ class _AgentSheetState extends State<AgentSheet> {
     if (current == null ||
         current.title != 'New chat' ||
         _titleGenerationInFlight ||
-        _messages.length < 2) {
+        _messages.isEmpty) {
       return;
     }
 
