@@ -167,10 +167,6 @@ class AgentTaskCoordinator {
         onTextDelta: (delta) {
           if (delta.isEmpty) return;
           streaming.appendContent(assistantMessageId, delta);
-          final current = notifier.value;
-          notifier.value = current.copyWith(
-            streamingText: current.streamingText + delta,
-          );
         },
         onProgress: (event) {
           streaming.updateProgress(assistantMessageId, event);
@@ -178,24 +174,6 @@ class AgentTaskCoordinator {
             streaming.updateModel(assistantMessageId, event.detail.trim());
           }
 
-          final current = notifier.value;
-          final progress = List<AgentProgressEvent>.from(current.progress);
-          final duplicate = progress.isNotEmpty &&
-              progress.last.label == event.label &&
-              progress.last.detail == event.detail;
-          final compact = event.kind == 'retry' || event.kind == 'fallback';
-          final lastCompact = progress.isNotEmpty &&
-              (progress.last.kind == 'retry' ||
-                  progress.last.kind == 'fallback');
-
-          if (compact && lastCompact) {
-            progress[progress.length - 1] = event;
-          } else if (!duplicate) {
-            progress.add(event);
-            if (progress.length > 8) progress.removeAt(0);
-          }
-
-          notifier.value = current.copyWith(progress: progress);
           unawaited(
             BackgroundAgentRuntime.update(
               taskId: taskId,
