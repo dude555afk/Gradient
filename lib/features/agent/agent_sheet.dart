@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/agent/agent_models.dart';
-import '../../core/agent/background_agent_runtime.dart';
-import '../../core/agent/agent_service.dart';
+import '../../core/agent/agent_task_coordinator.dart';
 import '../../core/agent/agent_session_store.dart';
 import '../../core/ai/openai_compatible_provider.dart';
 import '../../core/diff/simple_diff.dart';
 import '../../core/gh/gh_backend.dart';
+import '../../core/models/model_router.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/workspace/workspace_store.dart';
 import '../../shared/gradient_markdown.dart';
@@ -36,23 +36,24 @@ class _AgentSheetState extends State<AgentSheet> {
   final _scrollController = ScrollController();
   final _settings = AppSettingsStore();
   final _sessionStore = AgentSessionStore();
+  final _taskCoordinator = AgentTaskCoordinator.instance;
   final _imagePicker = ImagePicker();
 
   final _messages = <AgentMessage>[];
   final _changes = <PendingFileChange>[];
   final _pullRequests = <PendingPullRequest>[];
-  final _progress = <AgentProgressEvent>[];
   final _pendingImages = <_PendingImage>[];
 
   AgentConversation? _conversation;
   String? _taskBranch;
-  String _streamingText = '';
-  final _streamingNotifier = ValueNotifier<String>('');
+  ValueListenable<AgentTaskSnapshot>? _taskListenable;
+  VoidCallback? _taskListener;
   bool _scrollTickPending = false;
   bool _titleGenerationInFlight = false;
   bool _busy = false;
   bool _applying = false;
   bool _webEnabled = true;
+  ModelRole? _roleOverride;
   bool _loadingSession = true;
 
   @override
@@ -84,17 +85,60 @@ class _AgentSheetState extends State<AgentSheet> {
         ..clear()
         ..addAll(conversation.pullRequests);
       _taskBranch = conversation.taskBranch;
-      _progress.clear();
       _pendingImages.clear();
-      _streamingText = '';
-      _streamingNotifier.value = '';
       _loadingSession = false;
     });
     _sessionStore.setActive(
       widget.workspace.fullName,
       conversation.id,
     );
+    _attachTask(conversation.id);
     _scrollToLatest();
+  }
+
+  void _attachTask(String conversationId) {
+    final previous = _taskListenable;
+    final previousListener = _taskListener;
+    if (previous != null && previousListener != null) {
+      previous.removeListener(previousListener);
+    }
+
+    final listenable = _taskCoordinator.listenable(conversationId);
+    _taskListenable = listenable;
+
+    if (listenable == null) {
+      _taskListener = null;
+      if (mounted && _busy) {
+        setState(() {
+          _busy = false;
+        });
+      }
+      return;
+    }
+
+    void sync() {
+      if (!mounted) return;
+      final snapshot = listenable.value;
+      setState(() {
+        _busy = snapshot.running;
+        _conversation = snapshot.conversation;
+        _messages
+          ..clear()
+          ..addAll(snapshot.conversation.messages);
+        _changes
+          ..clear()
+          ..addAll(snapshot.conversation.changes);
+        _pullRequests
+          ..clear()
+          ..addAll(snapshot.conversation.pullRequests);
+        _taskBranch = snapshot.conversation.taskBranch;
+      });
+      _scrollToLatest();
+    }
+
+    _taskListener = sync;
+    listenable.addListener(sync);
+    sync();
   }
 
   Future<void> _persistSession() async {
@@ -131,7 +175,7 @@ class _AgentSheetState extends State<AgentSheet> {
     if (current == null ||
         current.title != 'New chat' ||
         _titleGenerationInFlight ||
-        _messages.length < 2) {
+        _messages.isEmpty) {
       return;
     }
 
@@ -584,8 +628,10 @@ class _AgentSheetState extends State<AgentSheet> {
     _scrollToLatest();
   }
 
-  Future<void> _messageAction(int index, String action) async {
-    if (_busy || index < 0 || index >= _messages.length) return;
+  Future<void> _messageAction(String messageId, String action) async {
+    if (_busy) return;
+    final index = _messages.indexWhere((message) => message.id == messageId);
+    if (index < 0) return;
     final message = _messages[index];
 
     if (action == 'edit' && message.role == 'user') {
@@ -746,146 +792,57 @@ class _AgentSheetState extends State<AgentSheet> {
         _pendingImages.map((e) => e.dataUri).toList(growable: false);
     final imageCount = imageDataUris.length;
 
+    final userMessage = AgentMessage.create(
+      role: 'user',
+      content: imageCount == 0
+          ? prompt
+          : '$prompt\n\n📎 $imageCount image${imageCount == 1 ? '' : 's'} attached',
+    );
+    final assistantMessageId =
+        (DateTime.now().microsecondsSinceEpoch + 1).toString();
+    final assistantSlot = AgentMessage(
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+    );
+
     setState(() {
       _busy = true;
-      _streamingText = '';
-      _streamingNotifier.value = '';
-      _progress.clear();
-      _messages.add(
-        AgentMessage(
-          role: 'user',
-          content: imageCount == 0
-              ? prompt
-              : '$prompt\n\n📎 $imageCount image${imageCount == 1 ? '' : 's'} attached',
-        ),
-      );
+      _messages
+        ..add(userMessage)
+        ..add(assistantSlot);
       _pendingImages.clear();
       if (forced == null) _controller.clear();
     });
     await _persistSession();
     _scrollToLatest();
 
-    final backgroundTaskId =
-        '${_conversation?.id ?? DateTime.now().microsecondsSinceEpoch}:run';
-    try {
-      await BackgroundAgentRuntime.start(
-        taskId: backgroundTaskId,
-        conversationId: _conversation?.id ?? '',
-        title: _conversation?.title == 'New chat'
-            ? widget.workspace.fullName
-            : (_conversation?.title ?? widget.workspace.fullName),
-      );
-    } catch (_) {
-      // The task still works in foreground if the native keep-alive is
-      // unavailable on a non-Android host or an older build.
-    }
-
-    try {
-      final result = await AgentService(
-        settings: settings,
-        apiKey: apiKey,
-        githubToken: githubToken,
-        workspace: widget.workspace,
-        webEnabled: _webEnabled,
-        pageContext: widget.contextText,
-      ).run(
-        prompt: prompt,
-        history: history,
-        imageDataUris: imageDataUris,
-        onTextDelta: (delta) {
-          if (!mounted || delta.isEmpty) return;
-          _streamingText += delta;
-          _streamingNotifier.value = _streamingText;
-          _scrollToLatest();
-        },
-        onProgress: (event) {
-          if (!mounted) return;
-          setState(() {
-            final duplicate = _progress.isNotEmpty &&
-                _progress.last.label == event.label &&
-                _progress.last.detail == event.detail;
-            if (!duplicate) {
-              _progress.add(event);
-              if (_progress.length > 8) _progress.removeAt(0);
-            }
-          });
-          unawaited(
-            BackgroundAgentRuntime.update(
-              taskId: backgroundTaskId,
-              detail: event.detail.trim().isEmpty
-                  ? event.label
-                  : '${event.label} • ${event.detail}',
-            ).catchError((_) {}),
-          );
-          _scrollToLatest();
-        },
-      );
-
-      if (!mounted) return;
-      setState(() {
-        if (result.text.trim().isNotEmpty) {
-          _messages.add(
-            AgentMessage(role: 'assistant', content: result.text),
-          );
-        }
-        _changes.addAll(result.fileChanges);
-        _pullRequests.addAll(result.pullRequests);
-
-        final used = result.branchUsed?.trim();
-        if (used != null &&
-            used.isNotEmpty &&
-            used != widget.workspace.branch) {
-          _taskBranch = used;
-        }
-        _streamingText = '';
-        _streamingNotifier.value = '';
-      });
-      await _persistSession();
-      unawaited(_generateSmartTitleIfNeeded(settings, apiKey));
-      _scrollToLatest();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _streamingText = '';
-        _streamingNotifier.value = '';
-        _messages.add(
-          AgentMessage(
-            role: 'error',
-            content: _friendlyError(error),
-          ),
-        );
-      });
-      await _persistSession();
-      _scrollToLatest();
-    } finally {
-      try {
-        await BackgroundAgentRuntime.stop(taskId: backgroundTaskId);
-      } catch (_) {}
+    final current = _conversation;
+    if (current == null) {
       if (mounted) {
-        setState(() {
-          _busy = false;
-          _progress.clear();
-        });
+        setState(() => _busy = false);
       }
-    }
-  }
-
-  String _friendlyError(Object error) {
-    if (error is AiProviderException) {
-      final detail = error.friendlyMessage;
-      if (error.statusCode == 429) {
-        return 'The AI provider is rate-limited right now. Gradient retried automatically, but the provider is still busy.\n\n$detail';
-      }
-      return 'The AI provider could not complete this request.\n\n$detail';
+      return;
     }
 
-    final raw = error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (raw.contains('gh failed')) {
-      return 'GitHub could not complete that operation.\n\n'
-          '${raw.length > 260 ? '${raw.substring(0, 260)}…' : raw}';
-    }
-    return 'Gradient could not finish this request.\n\n'
-        '${raw.length > 260 ? '${raw.substring(0, 260)}…' : raw}';
+    final task = _taskCoordinator.launch(
+      conversation: current,
+      assistantMessageId: assistantMessageId,
+      history: history,
+      prompt: prompt,
+      imageDataUris: imageDataUris,
+      settings: settings,
+      apiKey: apiKey,
+      githubToken: githubToken,
+      workspace: widget.workspace,
+      webEnabled: _webEnabled,
+      pageContext: widget.contextText,
+      roleOverride: _roleOverride,
+    );
+
+    _taskListenable = task;
+    _attachTask(current.id);
+    unawaited(_generateSmartTitleIfNeeded(settings, apiKey));
   }
 
   Future<String> _ensureTaskBranch(GhBackend gh) async {
@@ -943,7 +900,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() {
         _changes.remove(change);
         _messages.add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'assistant',
             content: 'Committed **${change.path}** to `$branch` '
                 '(${sha.length > 8 ? sha.substring(0, 8) : sha}).',
@@ -992,7 +949,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() {
         _changes.clear();
         _messages.add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'assistant',
             content: 'Committed **$count files** atomically to `$branch` '
                 '(${sha.length > 8 ? sha.substring(0, 8) : sha}).',
@@ -1033,7 +990,7 @@ class _AgentSheetState extends State<AgentSheet> {
       setState(() {
         _pullRequests.remove(proposal);
         _messages.add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'assistant',
             content: 'Pull request created: $url',
           ),
@@ -1051,9 +1008,13 @@ class _AgentSheetState extends State<AgentSheet> {
 
   @override
   void dispose() {
+    final listenable = _taskListenable;
+    final listener = _taskListener;
+    if (listenable != null && listener != null) {
+      listenable.removeListener(listener);
+    }
     _controller.dispose();
     _scrollController.dispose();
-    _streamingNotifier.dispose();
     super.dispose();
   }
 
@@ -1253,19 +1214,19 @@ class _AgentSheetState extends State<AgentSheet> {
                                 ],
                               ),
                             ),
-                          for (var i = 0; i < _messages.length; i++)
+                          for (final message in _messages)
                             KelivoChatMessage(
-                              message: _messages[i],
+                              key: ValueKey(message.id),
+                              message: message,
+                              streamingListenable:
+                                  _taskCoordinator.streaming.hasNotifier(
+                                message.id,
+                              )
+                                      ? _taskCoordinator.streaming
+                                          .getNotifier(message.id)
+                                      : null,
                               onAction: (action) =>
-                                  _messageAction(i, action),
-                            ),
-                          if (_busy && _progress.isNotEmpty)
-                            KelivoProgressTimeline(events: _progress),
-                          if (_busy)
-                            ValueListenableBuilder<String>(
-                              valueListenable: _streamingNotifier,
-                              builder: (context, text, _) =>
-                                  KelivoStreamingMessage(text: text),
+                                  _messageAction(message.id, action),
                             ),
                           if (_changes.length > 1)
                             Card(
@@ -1401,6 +1362,9 @@ class _AgentSheetState extends State<AgentSheet> {
                       webEnabled: _webEnabled,
                       onWebChanged: (value) =>
                           setState(() => _webEnabled = value),
+                      selectedRole: _roleOverride,
+                      onRoleChanged: (role) =>
+                          setState(() => _roleOverride = role),
                       onAttach: _pickImages,
                       onSend: () => _send(),
                       maxLines: keyboard > 0 ? 3 : 5,

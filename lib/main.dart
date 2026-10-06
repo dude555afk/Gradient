@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'core/settings/app_settings.dart';
 import 'features/home/home_page.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppSettingsStore().loadAppearance();
   runApp(const GradientApp());
 }
 
-ThemeData _theme(Brightness brightness, Color seed) {
+ThemeData _theme(
+  Brightness brightness,
+  Color seed, {
+  bool amoled = false,
+}) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
     seedColor: seed,
@@ -17,8 +23,9 @@ ThemeData _theme(Brightness brightness, Color seed) {
     brightness: brightness,
     colorScheme: scheme,
     useMaterial3: true,
-    scaffoldBackgroundColor:
-        dark ? const Color(0xFF0D0D0F) : const Color(0xFFF7F7F9),
+    scaffoldBackgroundColor: dark
+        ? (amoled ? Colors.black : const Color(0xFF0D0D0F))
+        : const Color(0xFFF7F7F9),
   );
 
   return base.copyWith(
@@ -37,7 +44,9 @@ ThemeData _theme(Brightness brightness, Color seed) {
     cardTheme: CardThemeData(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: dark ? const Color(0xFF171719) : Colors.white,
+      color: dark
+          ? (amoled ? const Color(0xFF09090A) : const Color(0xFF171719))
+          : Colors.white,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
@@ -49,7 +58,9 @@ ThemeData _theme(Brightness brightness, Color seed) {
     navigationBarTheme: NavigationBarThemeData(
       height: 68,
       elevation: 0,
-      backgroundColor: dark ? const Color(0xFF171719) : Colors.white,
+      backgroundColor: dark
+          ? (amoled ? Colors.black : const Color(0xFF171719))
+          : Colors.white,
       surfaceTintColor: Colors.transparent,
       indicatorColor: scheme.secondaryContainer,
       labelTextStyle: WidgetStatePropertyAll(
@@ -59,7 +70,9 @@ ThemeData _theme(Brightness brightness, Color seed) {
     searchBarTheme: SearchBarThemeData(
       elevation: const WidgetStatePropertyAll(0),
       backgroundColor: WidgetStatePropertyAll(
-        dark ? const Color(0xFF1A1A1D) : Colors.white,
+        dark
+            ? (amoled ? const Color(0xFF0A0A0B) : const Color(0xFF1A1A1D))
+            : Colors.white,
       ),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
       shape: WidgetStatePropertyAll(
@@ -85,7 +98,9 @@ ThemeData _theme(Brightness brightness, Color seed) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? const Color(0xFF1A1A1D) : Colors.white,
+      fillColor: dark
+          ? (amoled ? const Color(0xFF0A0A0B) : const Color(0xFF1A1A1D))
+          : Colors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide.none,
@@ -115,13 +130,20 @@ class GradientApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const seed = Color(0xFF8F8CFF);
-    return MaterialApp(
-      title: 'Gradient',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
-      theme: _theme(Brightness.light, seed),
-      darkTheme: _theme(Brightness.dark, seed),
-      home: const HomePage(),
+    return ValueListenableBuilder<bool>(
+      valueListenable: gradientAmoledMode,
+      builder: (context, amoled, _) => MaterialApp(
+        title: 'Gradient',
+        debugShowCheckedModeBanner: false,
+        themeMode: ThemeMode.system,
+        theme: _theme(Brightness.light, seed),
+        darkTheme: _theme(
+          Brightness.dark,
+          seed,
+          amoled: amoled,
+        ),
+        home: const HomePage(),
+      ),
     );
   }
 }

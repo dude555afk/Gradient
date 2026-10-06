@@ -7,7 +7,7 @@ void main() {
   test('routes workflow debugging to reasoning', () {
     expect(
       router.select('Why is my GitHub workflow failing?'),
-      ModelRole.reasoning,
+      ModelRole.debugging,
     );
   });
 

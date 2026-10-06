@@ -17,6 +17,6 @@ void main() {
   test('non-image task still uses normal model routing', () {
     final route = router.route('Fix this workflow failure');
 
-    expect(route.model, ModelRole.reasoning);
+    expect(route.model, ModelRole.debugging);
   });
 }

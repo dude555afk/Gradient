@@ -4,6 +4,7 @@ import '../../core/ai/provider_model_catalog.dart';
 import '../../core/gh/gh_auth_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/update/update_service.dart';
+import 'models_routing_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -38,6 +39,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _downloadingUpdate = false;
   double? _downloadProgress;
   GradientUpdateStatus? _updateStatus;
+  AiSettings? _loadedSettings;
+  bool _amoled = false;
 
   @override
   void initState() {
@@ -47,6 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _load() async {
     final settings = await _store.load();
+    final appearance = await _store.loadAppearance();
     final apiKey = await _store.apiKey();
     final githubToken = await _store.githubToken();
     final cachedModels = await _store.cachedModels();
@@ -68,12 +72,19 @@ class _SettingsPageState extends State<SettingsPage> {
           .toList(growable: false);
       _reasoningEffort = settings.reasoningEffort;
       _githubConnected = githubToken.isNotEmpty;
+      _loadedSettings = settings;
+      _amoled = appearance.amoled;
       _loading = false;
     });
   }
 
   AiSettings _settingsFromForm() {
-    return AiSettings(
+    final current = _loadedSettings;
+    if (current == null) {
+      throw StateError('Settings are not loaded yet.');
+    }
+
+    return current.copyWith(
       baseUrl: _baseUrl.text,
       defaultModel: _defaultModel.text,
       fastModel: _fastModel.text,
@@ -159,8 +170,10 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await _store.save(_settingsFromForm());
+      final next = _settingsFromForm();
+      await _store.save(next);
       await _store.setApiKey(_apiKey.text);
+      _loadedSettings = next;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Settings saved')),
@@ -430,23 +443,44 @@ class _SettingsPageState extends State<SettingsPage> {
                   setState(() => _reasoningEffort = value ?? '');
                 },
               ),
-              const SizedBox(height: 4),
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(top: 4),
-                leading: const Icon(Icons.tune_rounded),
-                title: const Text('Role-specific models'),
-                subtitle: const Text(
-                  'Optional overrides for faster or specialized tasks.',
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.hub_outlined),
+                title: const Text(
+                  'Models & routing',
+                  style: TextStyle(fontWeight: FontWeight.w700),
                 ),
-                children: [
-                  _modelField(_fastModel, 'Fast / title model'),
-                  _modelField(_codingModel, 'Coding model'),
-                  _modelField(_reasoningModel, 'Reasoning model'),
-                  _modelField(_searchModel, 'Search model'),
-                  _modelField(_visionModel, 'Vision model'),
-                  _modelField(_reviewerModel, 'Reviewer model'),
-                ],
+                subtitle: const Text(
+                  'Task roles, ordered fallbacks, and per-role reasoning.',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ModelsRoutingPage(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _sectionCard(
+            icon: Icons.palette_outlined,
+            title: 'Appearance',
+            subtitle: 'Theme and display',
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _amoled,
+                onChanged: (value) async {
+                  setState(() => _amoled = value);
+                  await _store.setAmoled(value);
+                },
+                secondary: const Icon(Icons.dark_mode_outlined),
+                title: const Text('AMOLED black'),
+                subtitle: const Text(
+                  'Use true black backgrounds while the system is in dark mode.',
+                ),
               ),
             ],
           ),
