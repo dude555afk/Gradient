@@ -188,8 +188,8 @@ class MemoryPipelineService {
     List<ChatMessage> window,
     MemoryPromptLang lang,
   ) {
-    final userPrefix = lang == MemoryPromptLang.'User: ';
-    final assistantPrefix = lang == MemoryPromptLang.'Assistant: ';
+    const userPrefix = 'User: ';
+    const assistantPrefix = 'Assistant: ';
     final lines = <String>[];
     for (final m in window) {
       String prefix;
@@ -248,7 +248,7 @@ class MemoryPipelineService {
     }
   }
 
-  // Upstream comment translated to English.
+  /// Manual "\u6574\u7406\u8bb0\u5fc6" — bypasses autoOrganize + N-turns; still needs model.
   Future<MemoryOrganizeResult> runNow({
     required String conversationId,
     required String assistantId,
