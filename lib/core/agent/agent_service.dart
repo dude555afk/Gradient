@@ -235,10 +235,11 @@ class AgentService {
         }
       }
 
-      if (finalText.isEmpty) {
-        finalText = changes.isNotEmpty || pullRequests.isNotEmpty
-            ? 'I prepared the requested changes for your review.'
-            : 'The agent reached its tool-call limit before producing a final response.';
+      if (finalText.isEmpty &&
+          changes.isEmpty &&
+          pullRequests.isEmpty) {
+        finalText =
+            'The agent reached its tool-call limit before producing a final response.';
       }
 
       onProgress?.call(
