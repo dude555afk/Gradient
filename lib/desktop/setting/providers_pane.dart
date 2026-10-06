@@ -1244,7 +1244,7 @@ class _DesktopProviderDetailPaneState extends State<DesktopProviderDetailPane> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '革命性竞价 AI MaaS 平台，价格由市场供需决定，告别高成本固定定价。',
+                        'A market-priced AI MaaS platform with pricing driven by supply and demand.',
                         style: TextStyle(
                           color: cs.onSurface.withValues(alpha: 0.8),
                         ),
@@ -1307,7 +1307,7 @@ class _DesktopProviderDetailPaneState extends State<DesktopProviderDetailPane> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '已内置硅基流动的免费模型，无需 API Key。若需更强大的模型，请申请并在此配置你自己的 API Key。',
+                        'Includes free SiliconFlow models without an API key. Configure your own API key here for additional models.',
                         style: TextStyle(
                           color: cs.onSurface.withValues(alpha: 0.8),
                         ),
@@ -1370,7 +1370,7 @@ class _DesktopProviderDetailPaneState extends State<DesktopProviderDetailPane> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '可靠高效的 API 中继服务，提供 Claude、Codex、Gemini 等中继服务。注重隐私·无数据倒卖·无模型掺水，充值quota 1:1，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。',
+                        'A reliable API relay for Claude, Codex, Gemini and other services with privacy-focused routing, usage billing, redundancy and automatic failover.',
                         style: TextStyle(
                           color: cs.onSurface.withValues(alpha: 0.8),
                         ),
@@ -1433,7 +1433,7 @@ class _DesktopProviderDetailPaneState extends State<DesktopProviderDetailPane> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型。支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)，新用户注册送 2 刀。',
+                        'An independent API relay offering Codex, Claude Code, GPT Image and other models with WebSocket support and transparent usage pricing.',
                         style: TextStyle(
                           color: cs.onSurface.withValues(alpha: 0.8),
                         ),
