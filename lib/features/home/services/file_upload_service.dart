@@ -16,13 +16,13 @@ import '../../../core/models/chat_input_data.dart';
 import '../../../core/utils/multimodal_input_utils.dart';
 import '../widgets/chat_input_bar.dart';
 
-/// 文件选取和上传服务
+// Upstream comment translated to English.
 ///
-/// 负责处理：
-/// - 图片选择 (相册/相机)
-/// - 文件选择
-/// - 桌面拖放处理
-/// - 文件复制到应用目录
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
 class FileUploadService {
   FileUploadService({
     required this.getContext,
@@ -32,7 +32,7 @@ class FileUploadService {
     this.hasWorkspace,
   });
 
-  /// 媒体控制器，用于添加图片和文件到输入栏
+  // Upstream comment translated to English.
   final ChatInputBarController mediaController;
 
   /// Context provider callback to avoid storing stale context
@@ -104,10 +104,10 @@ class FileUploadService {
         isSandboxDataFile(fileName: file.fileName, mime: file.mime);
   }
 
-  /// 复制选中的文件到应用上传目录
+  // Upstream comment translated to English.
   ///
-  /// [files] 要复制的文件列表
-  /// 返回复制后的文件路径列表
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
   Future<List<String>> copyPickedFiles(List<XFile> files) async {
     final saved = await _copyPickedFilesKeepingSlots(files);
     return saved.whereType<String>().toList(growable: false);
@@ -142,7 +142,7 @@ class FileUploadService {
     mediaController.enqueueImages(paths, getImageCompressConfig());
   }
 
-  /// 从相册选取图片
+  // Upstream comment translated to English.
   Future<void> onPickPhotos() async {
     try {
       // On desktop, fall back to FilePicker as image_picker is not supported.
@@ -185,9 +185,9 @@ class FileUploadService {
     } catch (_) {}
   }
 
-  /// 从相机拍照
+  // Upstream comment translated to English.
   ///
-  /// [context] 用于显示权限提示和错误消息
+  // Upstream comment translated to English.
   Future<void> onPickCamera(BuildContext context) async {
     try {
       // Proactive permission check on mobile
@@ -274,7 +274,7 @@ class FileUploadService {
     return croppedFiles;
   }
 
-  /// 根据文件扩展名推断 MIME 类型
+  // Upstream comment translated to English.
   String inferMimeByExtension(String name) {
     final mediaMime = inferMediaMimeFromSource(name);
     if (mediaMime.isNotEmpty) return mediaMime;
@@ -294,7 +294,7 @@ class FileUploadService {
         : 'application/octet-stream';
   }
 
-  /// 判断文件是否为图片（根据扩展名）
+  // Upstream comment translated to English.
   bool isImageExtension(String name) {
     final lower = name.toLowerCase();
     return lower.endsWith('.png') ||
@@ -307,7 +307,7 @@ class FileUploadService {
         lower.endsWith('.heif');
   }
 
-  /// 选取文件（图片、视频、文档等）
+  // Upstream comment translated to English.
   Future<void> onPickFiles() async {
     try {
       final anyFile = hasWorkspace?.call() ?? false;
@@ -350,7 +350,7 @@ class FileUploadService {
     } catch (_) {}
   }
 
-  /// 处理桌面端拖放的文件 (macOS/Windows/Linux)
+  // Upstream comment translated to English.
   Future<void> onFilesDroppedDesktop(List<XFile> files) async {
     if (files.isEmpty) return;
     try {

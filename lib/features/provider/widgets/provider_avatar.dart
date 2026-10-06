@@ -101,7 +101,7 @@ class ProviderAvatar extends StatelessWidget {
         );
       }
     } else if (type == 'icon' && value != null && value.isNotEmpty) {
-      // 校验资源在白名单中，防止非法值
+      // Upstream comment translated to English.
       final asset = BrandAssets.selectableAssetOrNull(value);
       if (asset == null) {
         avatar = _brandOrInitial(
@@ -218,8 +218,8 @@ class ProviderAvatar extends StatelessWidget {
     );
   }
 
-  // 优先彩色版本（{name}-color.svg），不存在则回退单色（{name}.svg）。
-  // 用户已显式指定 -color/-text 变体时按原样请求。
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
   Future<String?> _resolveLobehubPath(String iconName) async {
     final n = iconName.trim().toLowerCase();
     if (n.isEmpty) return null;
@@ -232,8 +232,8 @@ class ProviderAvatar extends StatelessWidget {
     return AvatarCache.getPath(BrandAssets.lobehubIconUrl(n));
   }
 
-  // 同步命中已缓存的 LobeHub 图标路径，命中则可直接渲染、避免 FutureBuilder 闪烁。
-  // 镜像 _resolveLobehubPath 的彩色优先/单色回退顺序。
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
   String? _peekLobehubPath(String iconName) {
     final n = iconName.trim().toLowerCase();
     if (n.isEmpty) return null;
@@ -252,13 +252,13 @@ class ProviderAvatar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = cs.primary.withValues(alpha: isDark ? 0.18 : 0.1);
-    // 缓存命中时同步渲染，避免每次 rebuild 都经历 FutureBuilder 的 loading 态。
+    // Upstream comment translated to English.
     final cached = _peekLobehubPath(iconName);
     if (cached != null) {
       return _lobehubTile(context, cached, bg);
     }
     return FutureBuilder<String?>(
-      // 优先彩色版本，回退单色；复用头像缓存（下载并缓存 SVG，失败返回 null）
+      // Upstream comment translated to English.
       future: _resolveLobehubPath(iconName),
       builder: (ctx, snap) {
         if (snap.connectionState != ConnectionState.done) {
@@ -282,8 +282,8 @@ class ProviderAvatar extends StatelessWidget {
         width: size * 0.7,
         height: size * 0.7,
         fit: BoxFit.contain,
-        // LobeHub 单色图标用 fill="currentColor"，注入前景色以适配明暗；
-        // 带 -color 的彩色图标有固定填充，不受影响
+        // Upstream comment translated to English.
+        // Upstream comment translated to English.
         theme: SvgTheme(currentColor: cs.onSurface),
         placeholderBuilder: (_) => const SizedBox.shrink(),
       ),

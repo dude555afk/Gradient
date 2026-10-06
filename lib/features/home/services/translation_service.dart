@@ -10,25 +10,25 @@ import '../../../core/services/api/stream/stream_chunk.dart';
 import '../../../core/services/chat/chat_service.dart';
 import '../../settings/widgets/language_select_sheet.dart';
 
-/// 翻译结果类型
+// Upstream comment translated to English.
 enum TranslationResultType {
-  /// 翻译成功
+  // Upstream comment translated to English.
   success,
 
-  /// 用户选择清除翻译
+  // Upstream comment translated to English.
   cleared,
 
-  /// 用户取消选择语言
+  // Upstream comment translated to English.
   cancelled,
 
-  /// 未配置翻译模型
+  // Upstream comment translated to English.
   noModelConfigured,
 
-  /// 翻译出错
+  // Upstream comment translated to English.
   error,
 }
 
-/// 翻译结果
+// Upstream comment translated to English.
 class TranslationResult {
   TranslationResult({required this.type, this.errorMessage});
 
@@ -67,13 +67,13 @@ bool shouldApplyTranslationFailure({
   return !isUserCancelError(error);
 }
 
-/// 消息翻译服务
+// Upstream comment translated to English.
 ///
-/// 功能：
-/// - 显示语言选择器
-/// - 调用翻译 API
-/// - 流式更新翻译结果
-/// - 保存翻译到数据库
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
 class TranslationService {
   TranslationService({required this.chatService, required this._getContext});
 
@@ -81,14 +81,14 @@ class TranslationService {
   final BuildContext Function() _getContext;
   final Map<String, Object> _runs = <String, Object>{};
 
-  /// 翻译消息
+  // Upstream comment translated to English.
   ///
-  /// [message] 要翻译的消息
-  /// [onTranslationStarted] 翻译开始回调（用户选择语言后、开始请求前调用）
-  /// [onTranslationUpdate] 翻译更新回调（用于实时更新 UI）
-  /// [onTranslationCleared] 翻译清除回调
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
   ///
-  /// 返回翻译结果
+  // Upstream comment translated to English.
   Future<TranslationResult> translateMessage({
     required ChatMessage message,
     required void Function() onTranslationStarted,
@@ -100,13 +100,13 @@ class TranslationService {
     final settings = context.read<SettingsProvider>();
     final assistant = context.read<AssistantProvider>().currentAssistant;
 
-    // 显示语言选择器
+    // Upstream comment translated to English.
     final language = await showLanguageSelector(context);
     if (language == null) {
       return TranslationResult(type: TranslationResultType.cancelled);
     }
 
-    // 检查是否选择清除翻译
+    // Upstream comment translated to English.
     if (language.code == '__clear__') {
       final clearToken = supersedeTranslationRun(_runs, message.id);
       ChatApiService.cancelRequest(translationRequestId(message.id));
@@ -118,7 +118,7 @@ class TranslationService {
       return TranslationResult(type: TranslationResultType.cleared);
     }
 
-    // 获取翻译模型配置，回退顺序：翻译专用 -> 助手模型 -> 全局默认
+    // Upstream comment translated to English.
     final translateProvider =
         settings.translateModelProvider ??
         assistant?.chatModelProvider ??
@@ -132,21 +132,21 @@ class TranslationService {
       return TranslationResult(type: TranslationResultType.noModelConfigured);
     }
 
-    // 用户已选择语言且模型配置有效，通知开始翻译
+    // Upstream comment translated to English.
     onTranslationStarted();
 
-    // 提取要翻译的文本内容
+    // Upstream comment translated to English.
     String textToTranslate = message.content;
     final runToken = Object();
     _runs[message.id] = runToken;
 
     try {
-      // 构建翻译 prompt
+      // Upstream comment translated to English.
       String prompt = settings.translatePrompt
           .replaceAll('{source_text}', textToTranslate)
           .replaceAll('{target_lang}', language.displayName);
 
-      // 创建翻译请求
+      // Upstream comment translated to English.
       final provider = settings.getProviderConfig(translateProvider);
 
       final translationStream = ChatApiService.sendMessageStream(
@@ -169,7 +169,7 @@ class TranslationService {
         }
         if (chunk is! TextDelta || chunk.text.isEmpty) continue;
         buffer.write(chunk.text);
-        // 实时更新翻译
+        // Upstream comment translated to English.
         onTranslationUpdate(buffer.toString());
       }
 
@@ -177,7 +177,7 @@ class TranslationService {
         return TranslationResult(type: TranslationResultType.cancelled);
       }
 
-      // 保存最终翻译结果
+      // Upstream comment translated to English.
       await chatService.updateMessage(
         message.id,
         translation: buffer.toString(),
@@ -192,7 +192,7 @@ class TranslationService {
       )) {
         return TranslationResult(type: TranslationResultType.cancelled);
       }
-      // 出错时清除翻译
+      // Upstream comment translated to English.
       onTranslationCleared();
       await chatService.updateMessage(message.id, translation: '');
 

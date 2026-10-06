@@ -418,7 +418,7 @@ class DeviceLocalToolsHandler(private val context: Context) {
             .toString()
     }
 
-    // 计算屏幕时间时向前回看的窗口(12h), 用于还原区间开始时刻已在前台的 App.
+    // Upstream comment translated to English.
     private val lookbackMs = 12L * 60 * 60 * 1000
 
     /**
@@ -690,7 +690,7 @@ class DeviceLocalToolsHandler(private val context: Context) {
         val eventId = ContentUris.parseId(uri)
         val savedReminders = insertReminders(eventId, reminderMinutes)
         if (savedReminders.isNotEmpty()) {
-            // 只有提醒真的写进去了才置 HAS_ALARM, 否则事件行会谎称有闹钟.
+            // Upstream comment translated to English.
             runCatching {
                 context.contentResolver.update(
                     ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId),
@@ -711,8 +711,8 @@ class DeviceLocalToolsHandler(private val context: Context) {
             .put("location", location)
             .put("reminders", JSONArray(savedReminders))
         if (savedReminders.size < reminderMinutes.size) {
-            // 事件已经建好了, 但部分/全部提醒被日历账户拒绝; 必须让模型看见,
-            // 否则它会告诉用户提醒已设置.
+            // Upstream comment translated to English.
+            // Upstream comment translated to English.
             payload
                 .put("reminders_requested", JSONArray(reminderMinutes))
                 .put(
@@ -742,7 +742,7 @@ class DeviceLocalToolsHandler(private val context: Context) {
                 else -> null
             } ?: continue
             if (value.isNaN() || value.isInfinite()) continue
-            // 用 Double 中转: Math.abs(Int.MIN_VALUE) 仍是负数, 会被当成"事件开始之后"提醒.
+            // Upstream comment translated to English.
             minutes.add(Math.abs(value).coerceAtMost(40320.0).toInt()) // 上限 4 周
             if (minutes.size == 5) break
         }

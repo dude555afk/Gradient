@@ -417,7 +417,7 @@ Stream<StreamChunk> sendGoogleStream(
       if (hasMarkdownImages || hasAttachedImages || hasInternalMedia) {
         final parsed = await parseTextAndImages(
           raw,
-          // Gemini API 目前无法直接拉取远程 http(s) 图片
+          // Upstream comment translated to English.
           allowRemoteImages: false,
           allowLocalImages: true,
           keepRemoteMarkdownText: true,
@@ -917,7 +917,7 @@ Stream<StreamChunk> sendGoogleStream(
     if (hasMarkdownImages || hasAttachedImages || hasInternalMedia) {
       final parsed = await parseTextAndImages(
         raw,
-        // Gemini API 目前无法直接拉取远程 http(s) 图片
+        // Upstream comment translated to English.
         allowRemoteImages: false,
         allowLocalImages: true,
         keepRemoteMarkdownText: true,

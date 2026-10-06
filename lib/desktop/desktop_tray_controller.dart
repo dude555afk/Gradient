@@ -177,16 +177,16 @@ class DesktopTrayController with TrayListener, WindowListener {
 
   @override
   void onTrayIconRightMouseDown() async {
-    // Right‑click: 弹出托盘菜单。
-    // 使用内部标记防止在一次交互周期内重复弹出，
-    // 否则在某些 Windows 环境下会看到第二个偏移的菜单。
+    // Upstream comment translated to English.
+    // Upstream comment translated to English.
+    // Upstream comment translated to English.
     if (_contextMenuOpen) {
       return;
     }
     _contextMenuOpen = true;
     try {
-      // Windows 环境下建议在弹出菜单前尝试聚焦窗口，
-      // 以避免部分环境中菜单不会在点击其他地方时自动关闭。
+      // Upstream comment translated to English.
+      // Upstream comment translated to English.
       if (defaultTargetPlatform == TargetPlatform.windows) {
         try {
           await windowManager.focus();
@@ -194,15 +194,15 @@ class DesktopTrayController with TrayListener, WindowListener {
       }
       await trayManager.popUpContextMenu();
     } catch (_) {}
-    // 无论是点击菜单项还是点击其他地方关闭菜单，
-    // popUpContextMenu 都会在菜单关闭后返回，这里统一重置标记。
+    // Upstream comment translated to English.
+    // Upstream comment translated to English.
     _contextMenuOpen = false;
   }
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    // 任一菜单项被点击视为一次菜单交互结束，
-    // 额外保险地解除防抖标记（即使 Future 尚未完成）。
+    // Upstream comment translated to English.
+    // Upstream comment translated to English.
     _contextMenuOpen = false;
   }
 

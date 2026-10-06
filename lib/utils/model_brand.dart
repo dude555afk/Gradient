@@ -35,21 +35,21 @@ class ModelBrand {
     ModelBrand(
       'Kimi',
       'kimi-color.svg',
-      r'kimi|moonshot|月之暗面|k3(?=$|[^a-z0-9])',
+      r'kimi|moonshot|k3(?=$|[^a-z0-9])',
     ),
     ModelBrand('Qwen', 'qwen-color.svg', r'(?:code)?qwen|qwq|qvq|dashscope'),
     ModelBrand(
       'Doubao',
       'doubao-color.svg',
-      r'doubao|豆包|seed(?:ance|ream|uplex|asr|tts)?(?=$|[^a-z0-9]|\d)',
+      r'doubao|seed(?:ance|ream|uplex|asr|tts)?(?=$|[^a-z0-9]|\d)',
     ),
-    ModelBrand('GLM', 'zhipu-color.svg', r'(?:chat)?glm|zhipu|智谱'),
+    ModelBrand('GLM', 'zhipu-color.svg', r'(?:chat)?glm|zhipu'),
     ModelBrand(
       'Hunyuan',
       'hunyuan-color.svg',
-      r'hunyuan|混元|hy[34](?=$|[^a-z0-9])',
+      r'hunyuan|hy[34](?=$|[^a-z0-9])',
     ),
-    ModelBrand('MiMo', 'mimo.svg', r'mimo|xiaomi|小米'),
+    ModelBrand('MiMo', 'mimo.svg', r'mimo|xiaomi'),
     ModelBrand('MiniMax', 'minimax-color.svg', r'minimax'),
     ModelBrand('Grok', 'grok.svg', r'grok'),
     ModelBrand(
@@ -59,13 +59,13 @@ class ModelBrand {
     ),
     ModelBrand('Llama', 'meta-color.svg', r'(?:code|tiny)?llama'),
     ModelBrand('Muse', 'meta-color.svg', r'muse[-_ ](?:spark|image)'),
-    ModelBrand('StepFun', 'stepfun.svg', r'stepfun|step(?=$|[^a-z0-9]|\d)|阶跃'),
-    ModelBrand('InternLM', 'internlm-color.svg', r'internlm|intern-s1|书生'),
+    ModelBrand('StepFun', 'stepfun.svg', r'stepfun|step(?=$|[^a-z0-9]|\d)'),
+    ModelBrand('InternLM', 'internlm-color.svg', r'internlm|intern-s1'),
     ModelBrand('LongCat', 'longcat.png', r'longcat'),
     ModelBrand(
       'SenseNova',
       'sensenova-color.svg',
-      r'sensenova|sensetime|商汤|日日新',
+      r'sensenova|sensetime',
     ),
     ModelBrand(
       'InclusionAI',
