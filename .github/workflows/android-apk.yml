@@ -5,6 +5,10 @@ on:
     branches: [main, "bootstrap/**", "feat/**", "fix/**"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
