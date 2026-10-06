@@ -9,7 +9,7 @@ void main() {
       id: 'chat-1',
       repoFullName: 'owner/repo',
       title: 'Fix workflow',
-      messages: const [
+      messages: [
         AgentMessage.create(role: 'user', content: 'Fix it'),
         AgentMessage.create(role: 'assistant', content: 'Working on it'),
       ],
@@ -35,7 +35,7 @@ void main() {
         AgentCheckpoint(
           id: 'cp-1',
           label: 'Before edit',
-          messages: const [
+          messages: [
             AgentMessage.create(role: 'user', content: 'Fix it'),
           ],
           changes: const [],
