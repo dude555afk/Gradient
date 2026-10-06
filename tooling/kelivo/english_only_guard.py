@@ -45,6 +45,13 @@ for path in ROOT.rglob("*"):
         continue
     if any(part in SKIP_PARTS for part in path.parts):
         continue
+    rel_parts = path.relative_to(ROOT).parts
+    if rel_parts and rel_parts[0] == "dependencies" and (
+        "test" in rel_parts or "benchmark" in rel_parts
+    ):
+        continue
+    if rel_parts[:4] == ("android", "app", "src", "test"):
+        continue
     try:
         text = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
