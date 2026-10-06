@@ -258,37 +258,3 @@ for rel, replacements in targeted.items():
 print("Second English replacement pass complete.")
 
 print("Bulk English replacement pass complete.")
-)": "RegExp(r'(Print)
-    },
-    "lib/core/providers/settings_provider.dart": {
-        "r'kimi|moonshot|月之暗面'": "r'kimi|moonshot'",
-        "r'zhipu|智谱|glm'": "r'zhipu|glm'",
-    },
-    "lib/core/models/backup.dart": {
-        "完全覆盖：清空本地后恢复": "Full overwrite: clear local data before restore",
-        "增量合并：智能去重": "Incremental merge with deduplication",
-    },
-}
-for rel, replacements in targeted.items():
-    replace_text(ROOT / rel, replacements)
-
-print("Second English replacement pass complete.")
-
-print("Bulk English replacement pass complete.")
-)",
-    },
-    "lib/core/providers/settings_provider.dart": {
-        "r'kimi|moonshot|月之暗面'": "r'kimi|moonshot'",
-        "r'zhipu|智谱|glm'": "r'zhipu|glm'",
-    },
-    "lib/core/models/backup.dart": {
-        "完全覆盖：清空本地后恢复": "Full overwrite: clear local data before restore",
-        "增量合并：智能去重": "Incremental merge with deduplication",
-    },
-}
-for rel, replacements in targeted.items():
-    replace_text(ROOT / rel, replacements)
-
-print("Second English replacement pass complete.")
-
-print("Bulk English replacement pass complete.")
