@@ -1924,7 +1924,7 @@ class MessageBuilderService {
   }
 
   String _formatCurrentHour(DateTime now) {
-    return '${now.year}年${now.month}月${now.day}日的${now.hour}点';
+    return '${now.year}-${now.month}-${now.day} ${now.hour}:00';
   }
 
   /// Inject search tool usage prompt into apiMessages.
