@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../core/agent/agent_models.dart';
 import '../../core/agent/kelivo_streaming_content_notifier.dart';
 import '../../core/models/model_router.dart';
+import '../../core/settings/app_settings.dart';
 import '../../shared/gradient_markdown.dart';
 import 'assistant_paragraph_splitter.dart';
 
@@ -496,20 +497,27 @@ class KelivoChatComposer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final amoled = gradientAmoledMode.value &&
+        Theme.of(context).brightness == Brightness.dark;
+    final composerColor =
+        amoled ? const Color(0xFF111113) : cs.surfaceContainerLow;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
       child: Material(
-        color: cs.surfaceContainerLow,
-        elevation: 6,
-        shadowColor: Colors.black.withValues(alpha: .22),
-        borderRadius: BorderRadius.circular(22),
+        color: composerColor,
+        surfaceTintColor: Colors.transparent,
+        elevation: 12,
+        shadowColor: Colors.black.withValues(alpha: .50),
+        borderRadius: BorderRadius.circular(26),
         clipBehavior: Clip.antiAlias,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(26),
             border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: .28),
+              color: amoled
+                  ? Colors.white.withValues(alpha: .10)
+                  : cs.outlineVariant.withValues(alpha: .22),
             ),
           ),
           child: Padding(
