@@ -422,9 +422,9 @@ class DeviceLocalToolsHandler(private val context: Context) {
     private val lookbackMs = 12L * 60 * 60 * 1000
 
     /**
-     * 用"全局单一前台"模型计算 [startMs, endMs) 区间内每个 App 的前台时长(毫秒).
-     * 任意时刻只有一个 App 计时: 新 App 进前台先结算上一个, 息屏停止计时;
-     * 区间起点向前回看以补回"开始前已在前台"的使用段, 结算时裁剪回区间内.
+     * Upstream implementation note translated to English.
+     * Upstream implementation note translated to English.
+     * Upstream implementation note translated to English.
      */
     @Suppress("DEPRECATION")
     private fun computeForegroundTime(
@@ -725,8 +725,8 @@ class DeviceLocalToolsHandler(private val context: Context) {
     }
 
     /**
-     * 提醒偏移(事件开始前多少分钟). 兼容数组、单个数字/字符串; 负值按绝对值处理,
-     * 去重后最多保留 5 条.
+     * Upstream implementation note translated to English.
+     * Upstream implementation note translated to English.
      */
     private fun parseReminderMinutes(raw: Any?): List<Int> {
         if (raw == null || raw == JSONObject.NULL) return emptyList()
@@ -743,13 +743,13 @@ class DeviceLocalToolsHandler(private val context: Context) {
             } ?: continue
             if (value.isNaN() || value.isInfinite()) continue
             // Upstream comment translated to English.
-            minutes.add(Math.abs(value).coerceAtMost(40320.0).toInt()) // 上限 4 周
+            minutes.add(Math.abs(value).coerceAtMost(40320.0).toInt()) // Upstream implementation note translated to English.
             if (minutes.size == 5) break
         }
         return minutes.toList()
     }
 
-    /** 写入提醒, 返回实际成功写入的偏移分钟数. */
+    /** Upstream implementation note translated to English. */
     private fun insertReminders(eventId: Long, minutes: List<Int>): List<Int> {
         if (minutes.isEmpty()) return emptyList()
         val saved = mutableListOf<Int>()
@@ -798,7 +798,7 @@ class DeviceLocalToolsHandler(private val context: Context) {
     // ---------------------------------------------------------------------
 
     /**
-     * 依次尝试: epoch 毫秒 -> 带偏移日期时间 -> Instant -> 本地日期时间 -> 本地日期(当天 0 点).
+     * Upstream implementation note translated to English.
      */
     private fun parseTime(raw: String, zone: ZoneId): ZonedDateTime {
         val text = raw.trim()
