@@ -800,18 +800,27 @@ class _AgentSheetState extends State<AgentSheet> {
         _pendingImages.map((e) => e.dataUri).toList(growable: false);
     final imageCount = imageDataUris.length;
 
+    final userMessage = AgentMessage.create(
+      role: 'user',
+      content: imageCount == 0
+          ? prompt
+          : '$prompt\n\n📎 $imageCount image${imageCount == 1 ? '' : 's'} attached',
+    );
+    final assistantMessageId =
+        (DateTime.now().microsecondsSinceEpoch + 1).toString();
+    final assistantSlot = AgentMessage(
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+    );
+
     setState(() {
       _busy = true;
       _streamingNotifier.value = '';
       _progress.clear();
-      _messages.add(
-        AgentMessage.create(
-          role: 'user',
-          content: imageCount == 0
-              ? prompt
-              : '$prompt\n\n📎 $imageCount image${imageCount == 1 ? '' : 's'} attached',
-        ),
-      );
+      _messages
+        ..add(userMessage)
+        ..add(assistantSlot);
       _pendingImages.clear();
       if (forced == null) _controller.clear();
     });
@@ -828,6 +837,7 @@ class _AgentSheetState extends State<AgentSheet> {
 
     final task = _taskCoordinator.launch(
       conversation: current,
+      assistantMessageId: assistantMessageId,
       history: history,
       prompt: prompt,
       imageDataUris: imageDataUris,
