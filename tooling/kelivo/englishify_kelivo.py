@@ -241,7 +241,7 @@ for path in list((ROOT / "lib").rglob("*.dart")) + list((ROOT / "tool").rglob("*
 # Targeted production strings that are not dual-language branches.
 targeted = {
     "lib/features/settings/pages/log_viewer_page.dart": {
-        "RegExp(r'(打印|列印)
+        "RegExp(r'(打印|列印)$')": "RegExp(r'(Print)$')",
     },
     "lib/core/providers/settings_provider.dart": {
         "r'kimi|moonshot|月之暗面'": "r'kimi|moonshot'",
