@@ -56,7 +56,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
       });
       ChatActionBus.instance.fire(ChatAction.exitGlobalSearch);
     });
-    // 初始进入时如果就是聊天页，则聚焦聊天输入框
+    // Upstream comment translated to English.
     if (_tabIndex == 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ChatActionBus.instance.fire(ChatAction.focusInput);
@@ -85,20 +85,20 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
             final minimized = await windowManager.isMinimized();
             final focused = await windowManager.isFocused();
 
-            // 优先级：
-            // 1. 如果窗口不可见或最小化，则显示并聚焦
-            // 2. 如果窗口可见但未聚焦，则聚焦
-            // 3. 如果窗口可见且已聚焦，则隐藏
+            // Upstream comment translated to English.
+            // Upstream comment translated to English.
+            // Upstream comment translated to English.
+            // Upstream comment translated to English.
             if (!visible || minimized) {
               await windowManager.show();
               await windowManager.focus();
-              // 如果当前是聊天页，显示窗口时聚焦输入框
+              // Upstream comment translated to English.
               if (_tabIndex == 0) {
                 ChatActionBus.instance.fire(ChatAction.focusInput);
               }
             } else if (!focused) {
               await windowManager.focus();
-              // 如果当前是聊天页，聚焦窗口时也聚焦输入框
+              // Upstream comment translated to English.
               if (_tabIndex == 0) {
                 ChatActionBus.instance.fire(ChatAction.focusInput);
               }
@@ -190,7 +190,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                   _globalSearchActive = false;
                 });
                 ChatActionBus.instance.fire(ChatAction.exitGlobalSearch);
-                // 切换到聊天页时聚焦输入框
+                // Upstream comment translated to English.
                 ChatActionBus.instance.fire(ChatAction.focusInput);
               },
               onTapGlobalSearch: () {

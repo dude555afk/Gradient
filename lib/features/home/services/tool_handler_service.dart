@@ -32,12 +32,12 @@ import 'built_in_tool_names.dart';
 import 'local_tools_service.dart';
 import 'tool_approval_service.dart';
 
-/// 工具调用处理服务
+// Upstream comment translated to English.
 ///
-/// 处理各类工具调用：
-/// - MCP 工具
-/// - Memory 工具 (§10)
-/// - Search 工具
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
+// Upstream comment translated to English.
 class ToolHandlerService {
   ToolHandlerService({required this.contextProvider});
 

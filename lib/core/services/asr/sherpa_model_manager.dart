@@ -50,8 +50,8 @@ abstract final class SherpaModelCatalog {
   static final List<SherpaModelDefinition> models = List.unmodifiable([
     SherpaModelDefinition(
       id: 'paraformer-zh-small-2024-03-09',
-      name: 'Paraformer 中文小模型',
-      description: '中文优先，兼顾简单英文，下载约 78 MB',
+      name: 'Paraformer small model',
+      description: 'Optimized for Mandarin with basic English support, approximately 78 MB',
       architecture: SherpaModelArchitecture.paraformer,
       archiveUri: Uri.parse(
         'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/'

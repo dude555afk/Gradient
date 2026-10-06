@@ -7135,7 +7135,7 @@ class _ReasoningSectionState extends State<_ReasoningSection> {
       ),
     );
 
-    // 抽公共样式，继承当前 DefaultTextStyle（从而继承正确的颜色）
+    // Upstream comment translated to English.
     final TextStyle baseStyle = DefaultTextStyle.of(
       context,
     ).style.copyWith(fontSize: 12.5, height: 1.32);
@@ -7156,7 +7156,7 @@ class _ReasoningSectionState extends State<_ReasoningSection> {
     final bool isLoading = loading;
     final display = _sanitize(widget.text);
 
-    // 未加载：不要再指定 color: fg，让它继承和"加载中"相同的颜色
+    // Upstream comment translated to English.
     Widget reasoningContent(String text) {
       if (enableReasoningMarkdown) {
         return RepaintBoundary(

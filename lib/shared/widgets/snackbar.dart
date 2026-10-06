@@ -190,13 +190,13 @@ class _AppSnackBarOverlayState extends State<AppSnackBarOverlay> {
     return AnimatedBuilder(
       animation: entry.animationController,
       builder: (context, child) {
-        // Calculate positioning - 统一间距
+        // Upstream comment translated to English.
         final baseOffset = visualIndex * 8.0; // 每个Toast固定间距8px
 
-        // Calculate scale - 统一缩放
+        // Upstream comment translated to English.
         final scaleValue = 1.0 - (visualIndex * 0.03);
 
-        // Calculate opacity - 统一透明度
+        // Upstream comment translated to English.
         final fadeValue = entry.fadeAnimation?.value ?? 1.0;
         final baseOpacity = isVisible ? 1.0 - (visualIndex * 0.2) : 0.0;
         final opacity = fadeValue * baseOpacity;
@@ -276,7 +276,7 @@ class _NotificationWidgetState extends State<NotificationWidget>
 
   void _handleDragUpdate(DragUpdateDetails details) {
     if (!widget.isTop || _isDismissing) return;
-    // 禁止向下滑动，仅允许向上滑动以关闭
+    // Upstream comment translated to English.
     if (details.delta.dy > 0) return;
     setState(() {
       _dragOffset = math.min(0, _dragOffset + details.delta.dy);

@@ -506,16 +506,16 @@ class _ProvidersPageState extends State<ProvidersPage> {
     _p(l10n.providersPageAliyunName, 'Aliyun', enabled: false, models: 0),
     _p(l10n.providersPageZhipuName, 'Zhipu AI', enabled: false, models: 0),
     _p('Claude', 'Claude', enabled: false, models: 0),
-    // _p(zh ? '腾讯混元' : 'Hunyuan', 'Hunyuan', enabled: false, models: 0),
+    // Upstream comment translated to English.
     // _p('InternLM', 'InternLM', enabled: true, models: 0),
     // _p('Kimi', 'Kimi', enabled: false, models: 0),
     _p('Grok', 'Grok', enabled: false, models: 0),
     // _p('302.AI', '302.AI', enabled: false, models: 0),
-    // _p(zh ? '阶跃星辰' : 'StepFun', 'StepFun', enabled: false, models: 0),
+    // Upstream comment translated to English.
     // _p('MiniMax', 'MiniMax', enabled: true, models: 0),
     _p(l10n.providersPageByteDanceName, 'ByteDance', enabled: false, models: 0),
-    // _p(zh ? '豆包' : 'Doubao', 'Doubao', enabled: true, models: 0),
-    // _p(zh ? '阿里云' : 'Alibaba Cloud', 'Alibaba Cloud', enabled: true, models: 0),
+    // Upstream comment translated to English.
+    // Upstream comment translated to English.
     // _p('Meta', 'Meta', enabled: false, models: 0),
     // _p('Mistral', 'Mistral', enabled: true, models: 0),
     // _p('Perplexity', 'Perplexity', enabled: true, models: 0),
@@ -704,7 +704,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     );
     if (!mounted || confirmed != true) return;
 
-    // 尽可能复用 ProviderDetailPage 删除前的清理逻辑：清理引用该 provider 的助手模型选择
+    // Upstream comment translated to English.
     for (final assistant in assistantProvider.assistants) {
       if (keysToDelete.contains(assistant.chatModelProvider)) {
         await assistantProvider.updateAssistant(

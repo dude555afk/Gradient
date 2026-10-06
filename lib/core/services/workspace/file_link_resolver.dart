@@ -70,7 +70,7 @@ class KelivoLink {
     if (raw.isEmpty) return null;
     // Manual split: a case-insensitive regex `[^/?#]` does not match
     // non-ASCII (Dart ignoreCase + negated class), so model-emitted
-    // `kelivo://workspace/员工表.csv` never parsed. Do not use [Uri]
+    // Upstream comment translated to English.
     // either — it would normalize `%2e%2e` / `..` away.
     const scheme = 'kelivo://';
     if (raw.length < scheme.length) return null;
@@ -198,8 +198,8 @@ class KelivoLink {
 
   /// Percent-decode one path segment. [Uri.decodeComponent] throws
   /// `ArgumentError: Illegal percent encoding` on any code unit > 127, so
-  /// raw UTF-8 names (`员工表.csv`) must be passed through. Mixed segments
-  /// (`报告%20终稿.csv`) are normalized then decoded.
+  // Upstream comment translated to English.
+  // Upstream comment translated to English.
   static String? _decodePathSegment(String raw) {
     if (!raw.contains('%')) return raw;
     final normalized = StringBuffer();

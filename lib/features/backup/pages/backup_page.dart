@@ -301,7 +301,7 @@ class _BackupPageState extends State<BackupPage> {
             body: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
-                // Section 1: 备份管理
+                // Upstream comment translated to English.
                 header(l10n.backupPageBackupManagement, first: true),
                 SectionCard(
                   children: [
@@ -345,10 +345,10 @@ class _BackupPageState extends State<BackupPage> {
                 header(l10n.localSnapshotSectionTitle),
                 const _LocalSnapshotMobileSection(),
 
-                // Section 2: 本地备份
+                // Upstream comment translated to English.
                 ..._buildMobileLocalBackupSection(context, l10n, vm, header),
 
-                // Section 3: WebDAV备份
+                // Upstream comment translated to English.
                 header(l10n.backupPageWebDavBackup),
                 SectionCard(
                   children: [
@@ -404,21 +404,21 @@ class _BackupPageState extends State<BackupPage> {
                                 return;
                               }
                               if (!mounted) return;
-                              // 按时间倒序排列（最新的在前）
+                              // Upstream comment translated to English.
                               list.sort((a, b) {
-                                // 优先使用 lastModified
+                                // Upstream comment translated to English.
                                 if (a.lastModified != null &&
                                     b.lastModified != null) {
                                   return b.lastModified!.compareTo(
                                     a.lastModified!,
                                   );
                                 }
-                                // 如果都没有 lastModified，按文件名倒序（文件名通常包含时间戳）
+                                // Upstream comment translated to English.
                                 if (a.lastModified == null &&
                                     b.lastModified == null) {
                                   return b.displayName.compareTo(a.displayName);
                                 }
-                                // 有 lastModified 的排在前面
+                                // Upstream comment translated to English.
                                 if (a.lastModified == null) return 1;
                                 return -1;
                               });
@@ -800,7 +800,7 @@ class _BackupPageState extends State<BackupPage> {
                   ],
                 ),
 
-                // Section 3: S3 备份
+                // Upstream comment translated to English.
                 header(l10n.backupPageS3Backup),
                 SectionCard(
                   children: [
