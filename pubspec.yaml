@@ -10,10 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  Kelivo:
-    git:
-      url: https://github.com/Chevey339/kelivo.git
-      ref: 86de75b75c66f2c9b9de4299069068bd18f53766
   http: ^1.5.0
   html: ^0.15.6
   webview_flutter: ^4.13.1
