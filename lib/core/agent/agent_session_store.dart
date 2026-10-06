@@ -196,6 +196,17 @@ class AgentSessionStore {
     return conversation;
   }
 
+  Future<AgentConversation?> loadById(
+    String repoFullName,
+    String id,
+  ) async {
+    final conversations = await list(repoFullName);
+    for (final conversation in conversations) {
+      if (conversation.id == id) return conversation;
+    }
+    return null;
+  }
+
   Future<AgentConversation?> loadActive(String repoFullName) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_activeKey);
