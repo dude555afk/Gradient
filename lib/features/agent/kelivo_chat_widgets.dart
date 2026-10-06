@@ -499,28 +499,13 @@ class KelivoChatComposer extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final amoled = gradientAmoledMode.value &&
         Theme.of(context).brightness == Brightness.dark;
-    final composerColor =
-        amoled ? const Color(0xFF111113) : cs.surfaceContainerLow;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-      child: Material(
-        color: composerColor,
-        surfaceTintColor: Colors.transparent,
-        elevation: 12,
-        shadowColor: Colors.black.withValues(alpha: .50),
-        borderRadius: BorderRadius.circular(26),
-        clipBehavior: Clip.antiAlias,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-              color: amoled
-                  ? Colors.white.withValues(alpha: .10)
-                  : cs.outlineVariant.withValues(alpha: .22),
-            ),
-          ),
-          child: Padding(
+      child: _ComposerBorder(
+        amoled: amoled,
+        cs: cs,
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(10, 5, 7, 7),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -604,8 +589,34 @@ class KelivoChatComposer extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ComposerBorder extends StatelessWidget {
+  const _ComposerBorder({
+    required this.amoled,
+    required this.cs,
+    required this.child,
+  });
+
+  final bool amoled;
+  final ColorScheme cs;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(
+          color: amoled
+              ? Colors.white.withValues(alpha: .10)
+              : cs.outlineVariant.withValues(alpha: .22),
         ),
       ),
+      child: child,
     );
   }
 }
