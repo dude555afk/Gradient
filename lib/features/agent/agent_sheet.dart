@@ -42,12 +42,10 @@ class _AgentSheetState extends State<AgentSheet> {
   final _messages = <AgentMessage>[];
   final _changes = <PendingFileChange>[];
   final _pullRequests = <PendingPullRequest>[];
-  final _progress = <AgentProgressEvent>[];
   final _pendingImages = <_PendingImage>[];
 
   AgentConversation? _conversation;
   String? _taskBranch;
-  final _streamingNotifier = ValueNotifier<String>('');
   ValueListenable<AgentTaskSnapshot>? _taskListenable;
   VoidCallback? _taskListener;
   bool _scrollTickPending = false;
@@ -87,9 +85,7 @@ class _AgentSheetState extends State<AgentSheet> {
         ..clear()
         ..addAll(conversation.pullRequests);
       _taskBranch = conversation.taskBranch;
-      _progress.clear();
       _pendingImages.clear();
-      _streamingNotifier.value = '';
       _loadingSession = false;
     });
     _sessionStore.setActive(
@@ -115,8 +111,6 @@ class _AgentSheetState extends State<AgentSheet> {
       if (mounted && _busy) {
         setState(() {
           _busy = false;
-          _progress.clear();
-              _streamingNotifier.value = '';
         });
       }
       return;
@@ -127,10 +121,6 @@ class _AgentSheetState extends State<AgentSheet> {
       final snapshot = listenable.value;
       setState(() {
         _busy = snapshot.running;
-        _streamingNotifier.value = snapshot.streamingText;
-        _progress
-          ..clear()
-          ..addAll(snapshot.progress);
         _conversation = snapshot.conversation;
         _messages
           ..clear()
@@ -818,8 +808,6 @@ class _AgentSheetState extends State<AgentSheet> {
 
     setState(() {
       _busy = true;
-      _streamingNotifier.value = '';
-      _progress.clear();
       _messages
         ..add(userMessage)
         ..add(assistantSlot);
@@ -1027,7 +1015,6 @@ class _AgentSheetState extends State<AgentSheet> {
     }
     _controller.dispose();
     _scrollController.dispose();
-    _streamingNotifier.dispose();
     super.dispose();
   }
 
