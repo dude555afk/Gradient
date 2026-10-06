@@ -195,7 +195,7 @@ class AgentTaskCoordinator {
       final messages = List<AgentMessage>.from(latest.messages);
       if (result.text.trim().isNotEmpty) {
         messages.add(
-          AgentMessage(role: 'assistant', content: result.text),
+          AgentMessage.create(role: 'assistant', content: result.text),
         );
       }
 
@@ -233,7 +233,7 @@ class AgentTaskCoordinator {
           conversation;
       final messages = List<AgentMessage>.from(latest.messages)
         ..add(
-          AgentMessage(
+          AgentMessage.create(
             role: 'error',
             content: _friendlyError(error),
           ),
