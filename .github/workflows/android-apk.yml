@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 env:
   GRADIENT_APPLICATION_ID: com.dude555afk.gradient
@@ -21,6 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cancel superseded branch runs
+        if: startsWith(github.ref, 'refs/heads/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=$GITHUB_REF_NAME&per_page=100" \
+            --jq ".workflow_runs[]
+              | select(.head_sha != \"$GITHUB_SHA\")
+              | select(.status == \"queued\" or .status == \"in_progress\")
+              | .id" \
+          | while read -r run_id; do
+              [ -n "$run_id" ] || continue
+              echo "Cancelling stale run $run_id"
+              gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel" >/dev/null || true
+            done
 
       - name: Verify signing secrets
         shell: bash
