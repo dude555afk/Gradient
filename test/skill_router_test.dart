@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gradient/core/skills/skill_router.dart';
+import 'package:Kelivo/core/skills/skill_router.dart';
 
 void main() {
   const router = SkillRouter();
