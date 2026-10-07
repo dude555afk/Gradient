@@ -68,7 +68,6 @@ final List<_LanguageConfig> _languageConfigs = [
   _LanguageConfig(
     RegExp(
       r'^(?:[\u{1F000}-\u{1FAFF}]|[\u2600-\u27BF]|\uFE0F|\u200D)+
-      unicode: true,
     ),
     0.9,
   ),
