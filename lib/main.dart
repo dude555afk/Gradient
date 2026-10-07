@@ -473,7 +473,7 @@ Future<void> _initRestoreFailureWindow() async {
       return;
     }
     await windowManager.waitUntilReadyToShow(
-      const WindowOptions(title: 'Kelivo'),
+      const WindowOptions(title: 'Gradient'),
       () async {
         await windowManager.show();
         await windowManager.focus();
