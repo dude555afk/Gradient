@@ -4942,11 +4942,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutPageEasterEggButton => 'Nice!';
 
   @override
-  String get aboutPageGradientSearchUnlocked =>
+  String get aboutPageKelivoSearchUnlocked =>
       'An unnamed door opened a crack. You might find it in Settings.';
 
   @override
-  String get aboutPageGradientSearchAlreadyUnlocked =>
+  String get aboutPageKelivoSearchAlreadyUnlocked =>
       'You\'ve already been through this door.';
 
   @override
@@ -6291,7 +6291,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Maximum tokens must be between 1024 and 32768.';
 
   @override
-  String get searchServiceNameGradient => 'Gradient';
+  String get searchServiceNameKelivo => 'Gradient';
 
   @override
   String get searchServicesDialogCountryOptional => 'Country/region (optional)';
