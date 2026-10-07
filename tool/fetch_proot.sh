@@ -244,8 +244,12 @@ for pair in "${ABIS[@]}"; do
 done
 
 echo ""
-verify_checksums
-echo "Checksums match $CHECKSUMS_FILE"
+if [[ "${SKIP_PROOT_CHECKSUMS:-0}" == "1" ]]; then
+  echo "Skipping pinned extracted-binary checksums for rolling Termux packages."
+else
+  verify_checksums
+  echo "Checksums match $CHECKSUMS_FILE"
+fi
 
 echo ""
 echo "Done. Binaries are local-only (gitignored). NOTICE lives at:"
