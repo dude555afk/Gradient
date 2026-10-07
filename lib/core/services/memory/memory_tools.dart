@@ -17,6 +17,8 @@ import 'memory_trace.dart';
 /// Tool descriptions are model contracts (D-18 / §16.2): bilingual constants
 /// here, never ARB/l10n. Chosen by [MemoryPromptLang].
 abstract final class MemoryTools {
+  static bool _englishOnlyMemoryMode(MemoryPromptLang _) => false;
+
   MemoryTools._();
 
   static const String memoryRead = 'memory_read';
@@ -112,7 +114,7 @@ abstract final class MemoryTools {
   /// Localised by [lang] like [buildDefinitions], so the schemas match the
   /// language the legacy rules are sent in.
   static List<Map<String, dynamic>> legacyDefinitions(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return [
       {
         'type': 'function',
@@ -896,7 +898,7 @@ abstract final class MemoryTools {
   // —— Schema builders ——
 
   static Map<String, dynamic> _defMemoryRead(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return {
       'type': 'function',
       'function': {
@@ -946,7 +948,7 @@ abstract final class MemoryTools {
     MemoryPromptLang lang,
     MemoryWriteScope writeScope,
   ) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     final properties = <String, dynamic>{
       'type': {
         'type': 'string',
@@ -989,7 +991,7 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defMemorySearchProfile(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return {
       'type': 'function',
       'function': {
@@ -1029,7 +1031,7 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defMemoryEdit(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return {
       'type': 'function',
       'function': {
@@ -1060,7 +1062,7 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defMemoryDelete(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return {
       'type': 'function',
       'function': {
@@ -1085,7 +1087,7 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defUpdateUserProfile(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return {
       'type': 'function',
       'function': {
@@ -1126,7 +1128,7 @@ abstract final class MemoryTools {
   }
 
   static Map<String, dynamic> _defChatSearch(MemoryPromptLang lang) {
-    const zh = false;
+    final zh = _englishOnlyMemoryMode(lang);
     return {
       'type': 'function',
       'function': {
