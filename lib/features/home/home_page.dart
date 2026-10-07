@@ -8,14 +8,14 @@ import '../github/repo_detail_page.dart';
 import '../settings/settings_page.dart';
 import '../workspace/github_workspace_page.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class GradientHubPage extends StatefulWidget {
+  const GradientHubPage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<GradientHubPage> createState() => _GradientHubPageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _GradientHubPageState extends State<GradientHubPage> {
   final _settings = AppSettingsStore();
   final _workspaceStore = WorkspaceStore();
   final _search = TextEditingController();
