@@ -49,6 +49,24 @@ class UpdateInfo {
   }
 
   factory UpdateInfo.fromJson(Map<String, dynamic> json) {
+    // Gradient's rolling release manifest.
+    if (json.containsKey('versionName')) {
+      final version = (json['versionName'] ?? '').toString();
+      final build = int.tryParse((json['versionCode'] ?? '').toString());
+      final apkUrl = (json['apkUrl'] ?? '').toString();
+      final releaseUrl = (json['releaseUrl'] ?? '').toString();
+      return UpdateInfo(
+        app: 'Gradient',
+        version: version,
+        build: build,
+        notes: 'Gradient $version is available.',
+        downloads: <String, String>{
+          if (apkUrl.isNotEmpty) 'android': apkUrl,
+          if (releaseUrl.isNotEmpty) 'universal': releaseUrl,
+        },
+      );
+    }
+
     final latest = (json['latest'] as Map?) ?? const {};
     final downloads =
         (latest['downloads'] as Map?)?.map(
@@ -90,7 +108,7 @@ class UpdateProvider extends ChangeNotifier {
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
       final url = Uri.parse(
-        'https://kelivo.psycheas.top/update.json?kelivo=$ts',
+        'https://github.com/dude555afk/Gradient/releases/download/gradient-latest/update.json?gradient=$ts',
       );
       final resp = await http.get(url);
       if (resp.statusCode != 200) {
