@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.os.StatFs
@@ -14,12 +16,14 @@ import io.flutter.embedding.android.FlutterSurfaceView
 import io.flutter.embedding.engine.FlutterEngine
 import com.dude555afk.gradient.workspace.WorkspacePlugin
 import io.flutter.plugin.common.MethodChannel
+import androidx.core.content.FileProvider
 import com.dexterous.flutterlocalnotifications.FlutterLocalNotificationsPlugin
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
 import java.util.Locale
+import java.security.MessageDigest
 
 class MainActivity : FlutterActivity() {
     private val kelivo get() = application as KelivoApplication
@@ -88,6 +92,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cleanupStaleGradientUpdateApks()
         forwardCachedProcessTextLaunch(reusedEngine, savedInstanceState, intent, processTextChannel)
         (kelivo.engine.plugins.get(FlutterLocalNotificationsPlugin::class.java) as? FlutterLocalNotificationsPlugin)?.let {
             forwardCachedNotificationLaunch(reusedEngine, savedInstanceState, intent, it)
@@ -115,6 +120,8 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "nativeLibraryDir" -> result.success(applicationInfo.nativeLibraryDir)
+                "cacheDir" -> result.success(cacheDir.absolutePath)
+                "installApk" -> installGradientUpdate(call.arguments, result)
                 else -> result.notImplemented()
             }
         }
@@ -153,6 +160,109 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+
+    private fun cleanupStaleGradientUpdateApks() {
+        Thread {
+            try {
+                val updateDir = File(cacheDir, "gradient-updates")
+                updateDir.listFiles()
+                    ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) }
+                    ?.forEach { it.delete() }
+            } catch (_: Exception) {
+                // Cache cleanup is best-effort and must never block app startup.
+            }
+        }.start()
+    }
+
+    private fun installGradientUpdate(arguments: Any?, result: MethodChannel.Result) {
+        try {
+            val args = arguments as? Map<*, *>
+            val rawPath = args?.get("path")?.toString()?.trim().orEmpty()
+            val expectedPackage = args?.get("expectedPackage")?.toString()?.trim().orEmpty()
+            val expectedCertificate = args?.get("expectedCertificateSha256")
+                ?.toString()
+                ?.trim()
+                ?.uppercase(Locale.ROOT)
+                .orEmpty()
+
+            if (rawPath.isEmpty() || expectedPackage.isEmpty() || expectedCertificate.isEmpty()) {
+                result.error("invalid_args", "Missing update verification arguments.", null)
+                return
+            }
+
+            val updateDir = File(cacheDir, "gradient-updates").canonicalFile
+            val apk = File(rawPath).canonicalFile
+            val allowedPrefix = updateDir.path + File.separator
+            if (!apk.path.startsWith(allowedPrefix) || !apk.isFile || apk.length() < 1024 * 1024) {
+                result.error("invalid_apk", "Update APK is missing or outside Gradient's cache.", null)
+                return
+            }
+
+            @Suppress("DEPRECATION")
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageManager.getPackageArchiveInfo(
+                    apk.absolutePath,
+                    PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+            } else {
+                packageManager.getPackageArchiveInfo(
+                    apk.absolutePath,
+                    PackageManager.GET_SIGNATURES,
+                )
+            }
+
+            if (packageInfo == null || packageInfo.packageName != expectedPackage) {
+                result.error("package_mismatch", "Downloaded APK package ID does not match Gradient.", null)
+                return
+            }
+
+            @Suppress("DEPRECATION")
+            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.signingInfo?.apkContentsSigners
+            } else {
+                packageInfo.signatures
+            }
+            val signer = signatures?.firstOrNull()
+            if (signer == null) {
+                result.error("signature_missing", "Downloaded APK has no readable signing certificate.", null)
+                return
+            }
+
+            val actualCertificate = sha256Fingerprint(signer.toByteArray())
+            if (actualCertificate != expectedCertificate) {
+                result.error("signature_mismatch", "Downloaded APK signing certificate does not match Gradient.", null)
+                return
+            }
+
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.gradient-updates",
+                apk,
+            )
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+            result.success("installer_opened")
+        } catch (e: ActivityNotFoundException) {
+            result.error("installer_missing", e.message ?: "No Android package installer is available.", null)
+        } catch (e: SecurityException) {
+            result.error(
+                "installer_permission",
+                e.message ?: "Android blocked installation from Gradient. Allow installs from this source and retry.",
+                null,
+            )
+        } catch (e: Exception) {
+            result.error("install_failed", e.message ?: "Unable to open Android's package installer.", null)
+        }
+    }
+
+    private fun sha256Fingerprint(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString(":") { byte -> "%02X".format(byte.toInt() and 0xFF) }
 
     /**
      * Space the app may still use on the volume holding its data, or null when
