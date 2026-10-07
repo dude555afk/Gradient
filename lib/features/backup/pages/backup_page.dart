@@ -72,8 +72,6 @@ class _BackupPageState extends State<BackupPage> {
   Future<bool?> _confirmCherryImport(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
     final cs = Theme.of(context).colorScheme;
-    final locale = Localizations.localeOf(context);
-    final isZh = locale.languageCode.startsWith('zh');
     final String body = 'This feature is experimental.\\nTo keep your data safe, it is recommended to back up before importing.\\nProceed to choose a file?';
 
     return showModalBottomSheet<bool>(
