@@ -13,6 +13,7 @@ import '../../../core/providers/backup_reminder_provider.dart';
 import '../../../core/models/chat_item.dart';
 import '../../../core/providers/user_provider.dart';
 import '../../settings/pages/settings_page.dart';
+import '../home_page.dart' as gradient_hub;
 import '../../translate/pages/translate_page.dart';
 import '../../backup/pages/backup_page.dart';
 import '../../../core/providers/assistant_provider.dart';
@@ -2859,6 +2860,26 @@ class _SideDrawerState extends State<SideDrawer> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 45,
+                                        height: 45,
+                                        child: Center(
+                                          child: IosIconButton(
+                                            size: 22,
+                                            color: textBase,
+                                            icon: Icons.account_tree_outlined,
+                                            padding: const EdgeInsets.all(10),
+                                            onTap: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => const gradient_hub.GradientHubPage(),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
                                       // Upstream comment translated to English.
                                       SizedBox(
                                         width: 45,
