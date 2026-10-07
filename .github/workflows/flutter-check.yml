@@ -28,4 +28,12 @@ jobs:
 
       - run: flutter pub get
       - run: flutter analyze lib
-      - run: flutter test
+      - name: Run Flutter tests when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+            flutter test
+          else
+            echo "No Flutter tests found; skipping flutter test."
+          fi
