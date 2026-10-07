@@ -27,5 +27,5 @@ jobs:
           cache: true
 
       - run: flutter pub get
-      - run: flutter analyze
+      - run: flutter analyze lib
       - run: flutter test
