@@ -118,7 +118,11 @@ jobs:
           flutter pub get
           python3 tooling/kelivo/english_only_guard.py
           flutter analyze lib
-          flutter test
+          if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+            flutter test
+          else
+            echo "No root Flutter tests found; skipping."
+          fi
 
       - name: Fetch GitHub CLI source
         run: |
