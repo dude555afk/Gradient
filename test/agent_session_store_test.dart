@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gradient/core/agent/agent_models.dart';
-import 'package:gradient/core/agent/agent_session_store.dart';
+import 'package:Kelivo/core/agent/agent_models.dart';
+import 'package:Kelivo/core/agent/agent_session_store.dart';
 
 void main() {
   test('conversation snapshots survive JSON round-trip', () {
