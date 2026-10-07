@@ -1,0 +1,73 @@
+name: Restore clean Kelivo token estimator
+
+on:
+  push:
+    branches:
+      - fix/post-merge-kelivo-build
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: contains(github.event.head_commit.message, '[restore-token-estimator]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/post-merge-kelivo-build
+          fetch-depth: 0
+
+      - name: Fetch exact pinned Kelivo estimator
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            https://raw.githubusercontent.com/Chevey339/kelivo/86de75b75c66f2c9b9de4299069068bd18f53766/lib/core/utils/token_estimator.dart \
+            -o /tmp/token_estimator.dart
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          src = Path("/tmp/token_estimator.dart")
+          text = src.read_text(encoding="utf-8")
+
+          if text.count("int estimateTokens(") != 1:
+              raise SystemExit("Pinned upstream estimator is not a single implementation")
+
+          old = r"""  _LanguageConfig(
+              RegExp(
+                r'^\p{Extended_Pictographic}[\p{Extended_Pictographic}\p{Emoji_Component}]*$',
+                unicode: true,
+              ),
+              0.9,
+            ),"""
+          new = r"""  _LanguageConfig(
+              RegExp(
+                r'^(?:[\u{1F000}-\u{1FAFF}]|[\u2600-\u27BF]|\uFE0F|\u200D)+$',
+                unicode: true,
+              ),
+              0.9,
+            ),"""
+
+          if old not in text:
+              raise SystemExit("Expected upstream emoji regex was not found")
+
+          text = text.replace(old, new, 1)
+
+          if text.count("int estimateTokens(") != 1:
+              raise SystemExit("Estimator became duplicated after patch")
+
+          Path("lib/core/utils/token_estimator.dart").write_text(text, encoding="utf-8")
+          print(f"Restored {len(text.splitlines())} lines with one estimateTokens implementation")
+          PY
+
+      - name: Commit exact estimator
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "gradient-build-fix"
+          git config user.email "actions@users.noreply.github.com"
+          git add lib/core/utils/token_estimator.dart
+          git commit -m "fix: restore exact clean Kelivo token estimator"
+          git push origin HEAD:fix/post-merge-kelivo-build
