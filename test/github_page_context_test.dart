@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gradient/core/github/github_page_context.dart';
+import 'package:Kelivo/core/github/github_page_context.dart';
 
 void main() {
   test('parses repository file pages', () {
