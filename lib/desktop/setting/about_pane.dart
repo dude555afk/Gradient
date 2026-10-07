@@ -309,8 +309,8 @@ class _AppHeaderCardState extends State<_AppHeaderCard> {
                       child: SizedBox(
                         width: 54,
                         height: 54,
-                        child: Image.asset(
-                          'assets/app_icon.png',
+                        child: SvgPicture.asset(
+                          'assets/icons/gradient.svg',
                           fit: BoxFit.cover,
                         ),
                       ),

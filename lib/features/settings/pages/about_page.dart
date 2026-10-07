@@ -431,8 +431,8 @@ class _AboutPageState extends State<AboutPage> {
                         child: SizedBox(
                           width: 54,
                           height: 54,
-                          child: Image.asset(
-                            'assets/app_icon.png',
+                          child: SvgPicture.asset(
+                            'assets/icons/gradient.svg',
                             fit: BoxFit.cover,
                           ),
                         ),
@@ -447,7 +447,7 @@ class _AboutPageState extends State<AboutPage> {
                             behavior: HitTestBehavior.opaque,
                             onTap: _onAppNameTap,
                             child: Text(
-                              'Kelivo',
+                              'Gradient',
                               key: const ValueKey('about-page-app-name'),
                               style: TextStyle(
                                 fontSize: 16,
