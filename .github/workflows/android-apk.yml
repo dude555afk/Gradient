@@ -5,8 +5,13 @@ on:
     branches: [main, "bootstrap/**", "feat/**", "fix/**"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
+  actions: write
 
 env:
   GRADIENT_APPLICATION_ID: com.dude555afk.gradient
@@ -17,6 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cancel superseded branch runs
+        if: startsWith(github.ref, 'refs/heads/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=$GITHUB_REF_NAME&per_page=100" \
+            --jq ".workflow_runs[]
+              | select(.head_sha != \"$GITHUB_SHA\")
+              | select(.status == \"queued\" or .status == \"in_progress\")
+              | .id" \
+          | while read -r run_id; do
+              [ -n "$run_id" ] || continue
+              echo "Cancelling stale run $run_id"
+              gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel" >/dev/null || true
+            done
 
       - name: Verify signing secrets
         shell: bash
@@ -39,14 +62,7 @@ jobs:
           flutter-version: '3.44.9'
           cache: true
 
-      - name: Generate Android runner
-        run: |
-          flutter create . \
-            --platforms=android \
-            --project-name gradient \
-            --org com.dude555afk
-
-      - name: Add Android networking, signing, and native bridge
+      - name: Configure Gradient signing
         shell: bash
         env:
           GRADIENT_KEYSTORE_BASE64: ${{ secrets.GRADIENT_KEYSTORE_BASE64 }}
@@ -63,21 +79,24 @@ jobs:
           raw = os.environ["GRADIENT_KEYSTORE_BASE64"]
           candidates = re.findall(r"[A-Za-z0-9+/=]{500,}", raw)
           if not candidates:
-              raise SystemExit("Could not find a base64 keystore payload in GRADIENT_KEYSTORE_BASE64")
+              raise SystemExit("Could not find a base64 keystore payload")
 
           payload = max(candidates, key=len)
-          try:
-              data = base64.b64decode(payload, validate=True)
-          except Exception as exc:
-              raise SystemExit(f"Invalid keystore base64 payload: {exc}")
+          data = base64.b64decode(payload, validate=True)
 
-          out = Path("android/app/gradient-release.jks")
-          out.write_bytes(data)
-          if out.stat().st_size < 1000:
+          keystore = Path("android/app/gradient-release.jks")
+          keystore.write_bytes(data)
+          if keystore.stat().st_size < 1000:
               raise SystemExit("Decoded keystore is unexpectedly small")
-          PY
 
-          test -s android/app/gradient-release.jks
+          password = os.environ["GRADIENT_KEYSTORE_PASSWORD"]
+          Path("android/key.properties").write_text(
+              "storeFile=gradient-release.jks\n"
+              f"storePassword={password}\n"
+              "keyAlias=gradient\n"
+              f"keyPassword={password}\n"
+          )
+          PY
 
           ACTUAL_CERT="$(
             keytool -list -v \
@@ -93,244 +112,13 @@ jobs:
             exit 1
           fi
 
-          python3 - <<'PY'
-          from pathlib import Path
-
-          manifest = Path("android/app/src/main/AndroidManifest.xml")
-          text = manifest.read_text()
-
-          marker = '<manifest xmlns:android="http://schemas.android.com/apk/res/android">'
-          permissions = """
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-              <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-          """
-          if 'android.permission.INTERNET' not in text:
-              text = text.replace(marker, marker + permissions)
-          elif 'android.permission.REQUEST_INSTALL_PACKAGES' not in text:
-              text = text.replace(
-                  '    <application',
-                  '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application',
-                  1,
-              )
-
-          if 'androidx.core.content.FileProvider' not in text:
-              provider = """
-                  <provider
-                      android:name="androidx.core.content.FileProvider"
-                      android:authorities="${applicationId}.fileprovider"
-                      android:exported="false"
-                      android:grantUriPermissions="true">
-                      <meta-data
-                          android:name="android.support.FILE_PROVIDER_PATHS"
-                          android:resource="@xml/update_file_paths" />
-                  </provider>
-              """
-              text = text.replace('</application>', provider + '\n    </application>')
-
-          manifest.write_text(text)
-
-          xml_dir = Path("android/app/src/main/res/xml")
-          xml_dir.mkdir(parents=True, exist_ok=True)
-          (xml_dir / "update_file_paths.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
-          <paths xmlns:android="http://schemas.android.com/apk/res/android">
-              <cache-path name="gradient_updates" path="gradient-updates/" />
-          </paths>
-          """)
-
-          gradle = Path("android/app/build.gradle.kts")
-          gradle_text = gradle.read_text()
-
-          if "useLegacyPackaging = true" not in gradle_text:
-              gradle_text = gradle_text.replace(
-                  "android {",
-                  """android {
-              packaging {
-                  jniLibs {
-                      useLegacyPackaging = true
-                  }
-              }""",
-                  1,
-              )
-
-          if 'create("release")' not in gradle_text:
-              gradle_text = gradle_text.replace(
-                  "    buildTypes {",
-                  """    signingConfigs {
-                  create("release") {
-                      keyAlias = "gradient"
-                      keyPassword = System.getenv("GRADIENT_KEYSTORE_PASSWORD")
-                      storeFile = file("gradient-release.jks")
-                      storePassword = System.getenv("GRADIENT_KEYSTORE_PASSWORD")
-                  }
-              }
-
-              buildTypes {""",
-                  1,
-              )
-
-          gradle_text = gradle_text.replace(
-              'signingConfig = signingConfigs.getByName("debug")',
-              'signingConfig = signingConfigs.getByName("release")',
-          )
-          gradle.write_text(gradle_text)
-
-          activity = Path(
-              "android/app/src/main/kotlin/com/dude555afk/gradient/MainActivity.kt"
-          )
-          activity.parent.mkdir(parents=True, exist_ok=True)
-          activity.write_text("""package com.dude555afk.gradient
-
-          import android.content.Intent
-          import android.content.pm.PackageManager
-          import android.net.Uri
-          import android.os.Build
-          import android.provider.Settings
-          import androidx.core.content.FileProvider
-          import io.flutter.embedding.android.FlutterActivity
-          import io.flutter.embedding.engine.FlutterEngine
-          import io.flutter.plugin.common.MethodChannel
-          import java.io.File
-          import java.security.MessageDigest
-
-          class MainActivity : FlutterActivity() {
-              private var pendingApkPath: String? = null
-
-              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-                  super.configureFlutterEngine(flutterEngine)
-                  MethodChannel(
-                      flutterEngine.dartExecutor.binaryMessenger,
-                      "gradient/native"
-                  ).setMethodCallHandler { call, result ->
-                      when (call.method) {
-                          "nativeLibraryDir" -> result.success(applicationInfo.nativeLibraryDir)
-                          "cacheDir" -> result.success(cacheDir.absolutePath)
-                          "installApk" -> {
-                              val path = call.argument<String>("path")
-                              val expectedPackage = call.argument<String>("expectedPackage")
-                              val expectedCertificate =
-                                  call.argument<String>("expectedCertificateSha256")
-                              if (path.isNullOrBlank() ||
-                                  expectedPackage.isNullOrBlank() ||
-                                  expectedCertificate.isNullOrBlank()
-                              ) {
-                                  result.error(
-                                      "invalid_update",
-                                      "Gradient received incomplete installer metadata.",
-                                      null,
-                                  )
-                                  return@setMethodCallHandler
-                              }
-
-                              try {
-                                  verifyApk(path, expectedPackage, expectedCertificate)
-                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                                      !packageManager.canRequestPackageInstalls()
-                                  ) {
-                                      pendingApkPath = path
-                                      startActivity(
-                                          Intent(
-                                              Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                              Uri.parse("package:$packageName"),
-                                          ),
-                                      )
-                                      result.success("permission_requested")
-                                  } else {
-                                      openInstaller(path)
-                                      result.success("installer_opened")
-                                  }
-                              } catch (error: Throwable) {
-                                  result.error(
-                                      "update_rejected",
-                                      error.message ?: "Android rejected this update.",
-                                      null,
-                                  )
-                              }
-                          }
-                          else -> result.notImplemented()
-                      }
-                  }
-              }
-
-              override fun onResume() {
-                  super.onResume()
-                  val path = pendingApkPath ?: return
-                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-                      packageManager.canRequestPackageInstalls()
-                  ) {
-                      pendingApkPath = null
-                      try {
-                          openInstaller(path)
-                      } catch (_: Throwable) {
-                          // Dart already explained the permission step.
-                      }
-                  }
-              }
-
-              @Suppress("DEPRECATION")
-              private fun verifyApk(
-                  path: String,
-                  expectedPackage: String,
-                  expectedCertificate: String,
-              ) {
-                  val file = File(path)
-                  if (!file.isFile || file.length() < 1024 * 1024) {
-                      error("The downloaded APK is missing or incomplete.")
-                  }
-
-                  val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                      packageManager.getPackageArchiveInfo(
-                          path,
-                          PackageManager.GET_SIGNING_CERTIFICATES,
-                      )
-                  } else {
-                      packageManager.getPackageArchiveInfo(
-                          path,
-                          PackageManager.GET_SIGNATURES,
-                      )
-                  } ?: error("Android could not read the downloaded APK.")
-
-                  if (info.packageName != expectedPackage) {
-                      error("The downloaded APK has the wrong package ID.")
-                  }
-
-                  val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                      info.signingInfo?.apkContentsSigners?.toList().orEmpty()
-                  } else {
-                      info.signatures?.toList().orEmpty()
-                  }
-                  if (certificates.isEmpty()) {
-                      error("The downloaded APK has no readable signing certificate.")
-                  }
-
-                  val digest = MessageDigest.getInstance("SHA-256")
-                      .digest(certificates.first().toByteArray())
-                      .joinToString(":") { "%02X".format(it) }
-
-                  if (!digest.equals(expectedCertificate, ignoreCase = true)) {
-                      error("The downloaded APK signing certificate does not match Gradient.")
-                  }
-              }
-
-              private fun openInstaller(path: String) {
-                  val file = File(path)
-                  val uri = FileProvider.getUriForFile(
-                      this,
-                      "$packageName.fileprovider",
-                      file,
-                  )
-                  val intent = Intent(Intent.ACTION_VIEW).apply {
-                      setDataAndType(uri, "application/vnd.android.package-archive")
-                      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                  }
-                  startActivity(intent)
-              }
-          }
-          """)
-          PY
-
-      - name: Add background agent runtime
-        run: python3 tooling/android/patch_runtime.py
+      - name: Validate transplanted Flutter source
+        run: |
+          set -euo pipefail
+          flutter pub get
+          python3 tooling/kelivo/english_only_guard.py
+          flutter analyze lib
+          flutter test
 
       - name: Fetch GitHub CLI source
         run: |
@@ -350,7 +138,7 @@ jobs:
           SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "ndk;27.0.12077973"
+          "$SDKMANAGER" "ndk;28.2.13676358"
 
       - name: Build GitHub CLI for Android arm64 with native DNS
         shell: bash
@@ -359,7 +147,7 @@ jobs:
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
 
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
-          TOOLCHAIN="$SDK_ROOT/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          TOOLCHAIN="$SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CC="$TOOLCHAIN/aarch64-linux-android21-clang"
           test -x "$CC"
 
@@ -368,9 +156,6 @@ jobs:
             go build -trimpath -ldflags="-s -w" \
             -o "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so" \
             ./cmd/gh
-
-      - name: Resolve dependencies
-        run: flutter pub get
 
       - name: Compute update version
         shell: bash
