@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gradient/core/diff/simple_diff.dart';
+import 'package:Kelivo/core/diff/simple_diff.dart';
 
 void main() {
   test('shows removed and added lines', () {
