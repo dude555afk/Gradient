@@ -121,7 +121,7 @@ jobs:
           if [ -d test ] && find test -type f -name '*_test.dart' -print -quit | grep -q .; then
             flutter test
           else
-            echo "No Flutter tests found; skipping flutter test."
+            echo "No root Flutter tests found; skipping."
           fi
 
       - name: Fetch GitHub CLI source
@@ -160,6 +160,48 @@ jobs:
             go build -trimpath -ldflags="-s -w" \
             -o "$GITHUB_WORKSPACE/android/app/src/main/jniLibs/arm64-v8a/libgh.so" \
             ./cmd/gh
+
+      - name: Resolve current Termux runtime package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          INDEX_URL="https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$INDEX_URL" -o /tmp/termux-packages
+
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          from pathlib import Path
+
+          wanted = {
+              "proot": "PROOT_VERSION",
+              "libtalloc": "TALLOC_VERSION",
+              "libandroid-shmem": "SHMEM_VERSION",
+          }
+          found = {}
+          text = Path("/tmp/termux-packages").read_text(encoding="utf-8")
+          for stanza in text.split("\n\n"):
+              fields = {}
+              for line in stanza.splitlines():
+                  if ": " in line:
+                      key, value = line.split(": ", 1)
+                      fields[key] = value
+              package = fields.get("Package")
+              if package in wanted and package not in found:
+                  version = fields.get("Version", "").strip()
+                  if not version:
+                      raise SystemExit(f"Missing Version for {package}")
+                  found[package] = version
+
+          missing = set(wanted) - set(found)
+          if missing:
+              raise SystemExit(f"Missing Termux packages: {sorted(missing)}")
+
+          for package, env_name in wanted.items():
+              print(f"{env_name}={found[package]}")
+          print("SKIP_PROOT_CHECKSUMS=1")
+          PY
+
+          echo "Resolved Termux package versions:"
+          grep -E '^(PROOT_VERSION|TALLOC_VERSION|SHMEM_VERSION|SKIP_PROOT_CHECKSUMS)=' "$GITHUB_ENV" | tail -n 4
 
       - name: Compute update version
         shell: bash
